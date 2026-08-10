@@ -1,0 +1,17 @@
+# El código de Moodle y los contenedores no van en este repositorio:
+# se descargan con scripts/0_instalar_entorno.ps1
+moodle/
+moodle-docker/
+
+# Copias de seguridad de la base
+*.sql
+backup_*
+
+# Descargas temporales de los scripts
+_descargas_plugins/
+*.zip
+
+# Archivos del sistema
+Thumbs.db
+desktop.ini
+.DS_Store
