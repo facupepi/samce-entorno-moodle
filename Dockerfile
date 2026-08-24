@@ -49,6 +49,13 @@ RUN git clone --branch "${ADAPTABLE_BRANCH}" --depth 1 \
 COPY deploy/instalar_plugins.sh /tmp/instalar_plugins.sh
 RUN chmod +x /tmp/instalar_plugins.sh && /tmp/instalar_plugins.sh && rm /tmp/instalar_plugins.sh
 
+# --- Plugin propio SAMCE (local_samce) --------------------------------------
+# Vendorizado acá (copia directa, no git clone) porque samce-moodle-plugin es
+# un repo privado: un clone en build time necesitaría un token de acceso.
+# Al cambiar algo en https://github.com/mtruchet/samce-moodle-plugin hay que
+# volver a copiar el contenido de esa rama main a plugins/local_samce acá.
+COPY plugins/local_samce /var/www/html/local/samce
+
 # --- Ajustes de PHP: rendimiento (mismo archivo que usa el entorno local) y
 # los mínimos que pide el chequeo de entorno de Moodle en producción -------
 COPY scripts/opcache-samce.ini /usr/local/etc/php/conf.d/zz-samce.ini
