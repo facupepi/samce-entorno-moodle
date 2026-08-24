@@ -21,7 +21,7 @@ chown -R www-data:www-data "$DATAROOT"
 echo "Esperando a MySQL en ${MYSQLHOST}:${MYSQLPORT} (usuario ${MYSQLUSER})..."
 ULTIMO_ERROR=""
 for i in $(seq 1 30); do
-    if ULTIMO_ERROR="$(mysqladmin ping -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" 2>&1)"; then
+    if ULTIMO_ERROR="$(mysqladmin ping --ssl-mode=DISABLED -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" 2>&1)"; then
         echo "  MySQL disponible."
         break
     fi
@@ -33,7 +33,7 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-YA_INSTALADO="$(mysql -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" "$MYSQLDATABASE" \
+YA_INSTALADO="$(mysql --ssl-mode=DISABLED -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" "$MYSQLDATABASE" \
     -N -e "SHOW TABLES LIKE 'mdl_config'" 2>/dev/null || true)"
 
 if [ -z "$YA_INSTALADO" ]; then
