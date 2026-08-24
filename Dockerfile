@@ -22,10 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         mysqli gd intl xml zip curl mbstring soap opcache xsl \
-    && a2enmod rewrite \
-    && (a2dismod mpm_event mpm_worker 2>/dev/null || true) \
-    && a2enmod mpm_prefork \
     && rm -rf /var/lib/apt/lists/*
+
+# Apache del base image trae mpm_prefork, pero a veces queda otro MPM
+# habilitado también ("More than one MPM loaded"). Se borran los symlinks
+# de los otros a mano en vez de confiar en a2dismod, y se confirma en el
+# build log qué quedó habilitado.
+RUN a2enmod rewrite \
+    && rm -f /etc/apache2/mods-enabled/mpm_event.load /etc/apache2/mods-enabled/mpm_event.conf \
+             /etc/apache2/mods-enabled/mpm_worker.load /etc/apache2/mods-enabled/mpm_worker.conf \
+    && a2enmod mpm_prefork \
+    && echo "--- MPM habilitados tras el fix ---" \
+    && ls -la /etc/apache2/mods-enabled/ | grep -i mpm
 
 # --- Núcleo de Moodle (misma rama que usa el entorno local) ----------------
 RUN git clone --branch "${MOODLE_BRANCH}" --depth 1 \
