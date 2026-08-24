@@ -18,7 +18,7 @@ ARG ADAPTABLE_BRANCH=MOODLE_405
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git unzip curl default-mysql-client \
         libzip-dev libicu-dev libxml2-dev libpng-dev libxslt1-dev \
-        libfreetype6-dev libjpeg62-turbo-dev \
+        libfreetype6-dev libjpeg62-turbo-dev libcurl4-openssl-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         mysqli gd intl xml zip curl mbstring soap opcache xsl \
