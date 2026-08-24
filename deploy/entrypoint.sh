@@ -18,14 +18,16 @@ echo "=== SAMCE Moodle — arranque del contenedor ==="
 mkdir -p "$DATAROOT"
 chown -R www-data:www-data "$DATAROOT"
 
-echo "Esperando a MySQL en ${MYSQLHOST}:${MYSQLPORT}..."
+echo "Esperando a MySQL en ${MYSQLHOST}:${MYSQLPORT} (usuario ${MYSQLUSER})..."
+ULTIMO_ERROR=""
 for i in $(seq 1 30); do
-    if mysqladmin ping -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" --silent 2>/dev/null; then
+    if ULTIMO_ERROR="$(mysqladmin ping -h"$MYSQLHOST" -P"$MYSQLPORT" -u"$MYSQLUSER" -p"$MYSQLPASSWORD" 2>&1)"; then
         echo "  MySQL disponible."
         break
     fi
     if [ "$i" -eq 30 ]; then
-        echo "ERROR: MySQL no respondió después de intentarlo." >&2
+        echo "ERROR: MySQL no respondió después de 30 intentos. Último error de mysqladmin:" >&2
+        echo "$ULTIMO_ERROR" >&2
         exit 1
     fi
     sleep 2
