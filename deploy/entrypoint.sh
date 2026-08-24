@@ -1,9 +1,9 @@
 #!/bin/bash
-# Entrypoint del contenedor de producción. Es idempotente: si la base ya
-# tiene el esquema de Moodle instalado, no vuelve a instalar — solo purga
-# cachés y arranca Apache. La instalación completa (esquema, idioma, tema,
-# identidad visual, curso de prueba) corre una única vez, la primera vez
-# que el contenedor arranca contra una base vacía.
+# Entrypoint del contenedor de producción. El esquema de Moodle (idioma,
+# tema, admin) solo se instala si la base está vacía. Complementos,
+# identidad visual y curso de prueba son pasos idempotentes que corren en
+# todos los arranques, así un arranque interrumpido a mitad de camino se
+# termina de completar solo en el siguiente, en vez de quedar a medias.
 set -euo pipefail
 
 MYSQLHOST="${MYSQLHOST:?falta la variable MYSQLHOST}"
@@ -55,26 +55,31 @@ if [ -z "$YA_INSTALADO" ]; then
     echo "=== Activando tema Adaptable ==="
     php /var/www/html/admin/cli/cfg.php --name=theme --set=adaptable
 
-    echo "=== Registrando los 7 complementos (ya están en la imagen) ==="
-    php /var/www/html/admin/cli/upgrade.php --non-interactive
-
-    echo "=== Aplicando identidad visual del campus ==="
-    rm -rf /tmp/imagenes_cvg
-    cp -r /opt/samce/imagenes /tmp/imagenes_cvg
-    php /opt/samce/2_aplicar_identidad.php
-
-    echo "=== Cargando curso, usuarios y evaluación de prueba ==="
-    cp /opt/samce/samce_setup.php /var/www/html/samce_setup.php
-    cp /opt/samce/samce_preguntas.php /var/www/html/samce_preguntas.php
-    (cd /var/www/html && php samce_setup.php && php samce_preguntas.php)
-    rm -f /var/www/html/samce_setup.php /var/www/html/samce_preguntas.php
-
-    echo "=== Instalación inicial completa ==="
+    echo "=== Instalación inicial del esquema completa ==="
 else
-    echo "Moodle ya estaba instalado — se omite la instalación inicial."
-    # Por si el redeploy trajo una versión de algún plugin nueva.
-    php /var/www/html/admin/cli/upgrade.php --non-interactive || true
+    echo "Moodle ya estaba instalado — se omite la instalación inicial del esquema."
 fi
+
+# Estos tres pasos son idempotentes (2_aplicar_identidad.php lo es por
+# diseño; samce_setup.php y samce_preguntas.php chequean si ya existe lo
+# que van a crear) — corren en TODOS los arranques, no solo el primero.
+# Así, si un arranque anterior llegó a instalar el esquema pero se cortó
+# antes de esto (como pasó una vez acá), el siguiente arranque los
+# completa en vez de quedar a mitad de camino para siempre.
+
+echo "=== Registrando complementos (idempotente) ==="
+php /var/www/html/admin/cli/upgrade.php --non-interactive || true
+
+echo "=== Aplicando identidad visual del campus (idempotente) ==="
+rm -rf /tmp/imagenes_cvg
+cp -r /opt/samce/imagenes /tmp/imagenes_cvg
+php /opt/samce/2_aplicar_identidad.php
+
+echo "=== Cargando curso, usuarios y evaluación de prueba (idempotente) ==="
+cp /opt/samce/samce_setup.php /var/www/html/samce_setup.php
+cp /opt/samce/samce_preguntas.php /var/www/html/samce_preguntas.php
+(cd /var/www/html && php samce_setup.php && php samce_preguntas.php)
+rm -f /var/www/html/samce_setup.php /var/www/html/samce_preguntas.php
 
 php /var/www/html/admin/cli/purge_caches.php || true
 
