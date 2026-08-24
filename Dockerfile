@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && docker-php-ext-install -j"$(nproc)" \
         mysqli gd intl xml zip curl mbstring soap opcache xsl \
     && a2enmod rewrite \
+    && (a2dismod mpm_event mpm_worker 2>/dev/null || true) \
+    && a2enmod mpm_prefork \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Núcleo de Moodle (misma rama que usa el entorno local) ----------------

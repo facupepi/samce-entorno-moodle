@@ -46,7 +46,8 @@ if [ -z "$YA_INSTALADO" ]; then
         --adminemail="${MOODLE_ADMIN_EMAIL:-admin@example.com}"
 
     echo "=== Idioma español y zona horaria ==="
-    php /var/www/html/admin/cli/install_language_pack.php --lang=es
+    php /var/www/html/admin/tool/langimport/cli/install.php --lang=es || \
+        echo "AVISO: no se pudo instalar el paquete de idioma es, sigue en inglés." >&2
     php /var/www/html/admin/cli/cfg.php --name=lang --set=es
     php /var/www/html/admin/cli/cfg.php --name=timezone --set=America/Argentina/Cordoba
     php /var/www/html/admin/cli/cfg.php --name=country --set=AR
