@@ -59,7 +59,7 @@ fi
 # arranque completa lo que faltó en vez de quedar a medias para siempre.
 
 echo "=== Idioma español y zona horaria (idempotente) ==="
-php /var/www/html/admin/tool/langimport/cli/install.php --lang=es || \
+php /opt/samce/instalar_idioma.php || \
     echo "AVISO: no se pudo instalar el paquete de idioma es, sigue en inglés." >&2
 php /var/www/html/admin/cli/cfg.php --name=lang --set=es
 php /var/www/html/admin/cli/cfg.php --name=timezone --set=America/Argentina/Cordoba

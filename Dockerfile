@@ -58,6 +58,7 @@ COPY deploy/php-samce.ini /usr/local/etc/php/conf.d/zz-samce-prod.ini
 COPY deploy/config.php /var/www/html/config.php
 COPY imagenes /opt/samce/imagenes
 COPY scripts/2_aplicar_identidad.php /opt/samce/2_aplicar_identidad.php
+COPY deploy/instalar_idioma.php /opt/samce/instalar_idioma.php
 COPY scripts/samce_setup.php /opt/samce/samce_setup.php
 COPY scripts/samce_preguntas.php /opt/samce/samce_preguntas.php
 COPY deploy/entrypoint.sh /opt/samce/entrypoint.sh
