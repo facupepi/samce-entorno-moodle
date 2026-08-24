@@ -39,8 +39,10 @@ RUN git clone --branch "${ADAPTABLE_BRANCH}" --depth 1 \
 COPY deploy/instalar_plugins.sh /tmp/instalar_plugins.sh
 RUN chmod +x /tmp/instalar_plugins.sh && /tmp/instalar_plugins.sh && rm /tmp/instalar_plugins.sh
 
-# --- Ajuste de rendimiento de PHP (mismo archivo que usa el entorno local) --
+# --- Ajustes de PHP: rendimiento (mismo archivo que usa el entorno local) y
+# los mínimos que pide el chequeo de entorno de Moodle en producción -------
 COPY scripts/opcache-samce.ini /usr/local/etc/php/conf.d/zz-samce.ini
+COPY deploy/php-samce.ini /usr/local/etc/php/conf.d/zz-samce-prod.ini
 
 # --- Config.php de producción, imágenes de identidad y scripts de setup ----
 COPY deploy/config.php /var/www/html/config.php
