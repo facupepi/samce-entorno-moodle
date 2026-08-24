@@ -78,5 +78,10 @@ fi
 
 php /var/www/html/admin/cli/purge_caches.php || true
 
+echo "=== Diagnóstico Apache (mods-enabled en runtime) ==="
+ls -la /etc/apache2/mods-enabled/ | grep -i mpm || echo "  (nada coincide con 'mpm')"
+echo "=== Diagnóstico Apache (apachectl -M) ==="
+apachectl -M 2>&1 | grep -i mpm || echo "  (apachectl -M no listó nada con 'mpm')"
+
 echo "=== Arrancando Apache ==="
 exec apache2-foreground
