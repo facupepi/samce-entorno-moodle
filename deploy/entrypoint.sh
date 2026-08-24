@@ -70,16 +70,20 @@ fi
 echo "=== Registrando complementos (idempotente) ==="
 php /var/www/html/admin/cli/upgrade.php --non-interactive || true
 
-echo "=== Aplicando identidad visual del campus (idempotente) ==="
-rm -rf /tmp/imagenes_cvg
-cp -r /opt/samce/imagenes /tmp/imagenes_cvg
-php /opt/samce/2_aplicar_identidad.php
-
 echo "=== Cargando curso, usuarios y evaluación de prueba (idempotente) ==="
 cp /opt/samce/samce_setup.php /var/www/html/samce_setup.php
 cp /opt/samce/samce_preguntas.php /var/www/html/samce_preguntas.php
 (cd /var/www/html && php samce_setup.php && php samce_preguntas.php)
 rm -f /var/www/html/samce_setup.php /var/www/html/samce_preguntas.php
+
+# Va después del contenido de prueba a propósito: samce_setup.php también
+# toca el shortname del sitio, y la identidad tiene que tener la última
+# palabra (mismo orden que el flujo local, que es el que verifica
+# scripts/3_verificar.php).
+echo "=== Aplicando identidad visual del campus (idempotente) ==="
+rm -rf /tmp/imagenes_cvg
+cp -r /opt/samce/imagenes /tmp/imagenes_cvg
+php /opt/samce/2_aplicar_identidad.php
 
 php /var/www/html/admin/cli/purge_caches.php || true
 
