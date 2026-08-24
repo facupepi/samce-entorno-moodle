@@ -45,27 +45,28 @@ if [ -z "$YA_INSTALADO" ]; then
         --adminpass="${MOODLE_ADMIN_PASS:-Samce.2026}" \
         --adminemail="${MOODLE_ADMIN_EMAIL:-admin@example.com}"
 
-    echo "=== Idioma español y zona horaria ==="
-    php /var/www/html/admin/tool/langimport/cli/install.php --lang=es || \
-        echo "AVISO: no se pudo instalar el paquete de idioma es, sigue en inglés." >&2
-    php /var/www/html/admin/cli/cfg.php --name=lang --set=es
-    php /var/www/html/admin/cli/cfg.php --name=timezone --set=America/Argentina/Cordoba
-    php /var/www/html/admin/cli/cfg.php --name=country --set=AR
-
-    echo "=== Activando tema Adaptable ==="
-    php /var/www/html/admin/cli/cfg.php --name=theme --set=adaptable
-
     echo "=== Instalación inicial del esquema completa ==="
 else
     echo "Moodle ya estaba instalado — se omite la instalación inicial del esquema."
 fi
 
-# Estos tres pasos son idempotentes (2_aplicar_identidad.php lo es por
-# diseño; samce_setup.php y samce_preguntas.php chequean si ya existe lo
-# que van a crear) — corren en TODOS los arranques, no solo el primero.
-# Así, si un arranque anterior llegó a instalar el esquema pero se cortó
-# antes de esto (como pasó una vez acá), el siguiente arranque los
-# completa en vez de quedar a mitad de camino para siempre.
+# De acá en adelante, todo es idempotente (cfg.php pisa el mismo valor sin
+# problema; langimport re-chequea si el paquete ya está; 2_aplicar_identidad
+# lo es por diseño; samce_setup.php y samce_preguntas.php chequean si ya
+# existe lo que van a crear) — corre en TODOS los arranques, no solo el
+# primero. Así, si un arranque anterior se cortó a mitad de camino (como
+# pasó acá dos veces: idioma primero, identidad después), el siguiente
+# arranque completa lo que faltó en vez de quedar a medias para siempre.
+
+echo "=== Idioma español y zona horaria (idempotente) ==="
+php /var/www/html/admin/tool/langimport/cli/install.php --lang=es || \
+    echo "AVISO: no se pudo instalar el paquete de idioma es, sigue en inglés." >&2
+php /var/www/html/admin/cli/cfg.php --name=lang --set=es
+php /var/www/html/admin/cli/cfg.php --name=timezone --set=America/Argentina/Cordoba
+php /var/www/html/admin/cli/cfg.php --name=country --set=AR
+
+echo "=== Activando tema Adaptable (idempotente) ==="
+php /var/www/html/admin/cli/cfg.php --name=theme --set=adaptable
 
 echo "=== Registrando complementos (idempotente) ==="
 php /var/www/html/admin/cli/upgrade.php --non-interactive || true
