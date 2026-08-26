@@ -16,3 +16,5 @@ $string['panelurl'] = 'Teacher panel callback URL';
 $string['panelurl_desc'] = 'Full URL of the SAMCE teacher dashboard\'s auth callback, where the signed launch token is sent as a query parameter.';
 $string['missingsecret'] = 'The local_samce launch secret has not been configured yet (Site administration > Plugins > Local plugins > SAMCE).';
 $string['missingpanelurl'] = 'The local_samce teacher panel URL has not been configured yet (Site administration > Plugins > Local plugins > SAMCE).';
+$string['backendurl'] = 'Backend events URL';
+$string['backendurl_desc'] = 'Full URL of the samce-backend endpoint that receives exam attempt events (POST /sessions/moodle-event). Used server-to-server, never seen by the student.';
