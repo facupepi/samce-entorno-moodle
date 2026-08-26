@@ -6,7 +6,9 @@ SAMCE - Plugin de Moodle (local_samce) para captura de eventos de interaccion
 
 Implementado hasta ahora:
 
-1. El lanzamiento firmado del panel docente (prerequisito de HU01 y HU02).
+1. El lanzamiento firmado del panel docente (prerequisito de HU01 y HU02),
+   tanto por curso (`launch.php`) como general (`launch_global.php`, todos
+   los cursos donde el docente tiene el rol).
 2. El registro automático de sesiones de examen (HU02, SAMCE-8): un observer
    escucha cuando un alumno arranca o entrega un intento de examen, y avisa
    a `samce-backend` — sin ninguna acción manual ni del docente ni del
@@ -30,6 +32,21 @@ Sprint 2, sin empezar.
 3. Redirige al panel docente (`samce-teacher-dashboard`) con el token en la
    query string. El backend (`samce-backend`) lo valida en
    `POST /auth/moodle/verify` y emite su propia sesión.
+
+### Panel general (todos los cursos)
+
+Además del link por-curso, `lib.php` agrega un segundo link
+("Panel SAMCE (todos mis cursos)") a la **navegación global** de Moodle
+(`local_samce_extend_navigation()`), visible para cualquier usuario que
+tenga `local/samce:viewpanel` en al menos un curso — sin depender de estar
+parado en ninguno.
+
+Al hacer clic, `launch_global.php` resuelve con
+`get_user_capability_course()` en qué cursos el usuario tiene esa
+capability, y arma el token con `course_ids` y `courses` (id + nombre de
+cada uno) en vez del `course_id`/`course_name` único de `launch.php`. Esto
+no requiere guardar en ningún lado la relación docente-curso: Moodle sigue
+siendo la única fuente de verdad, resuelta de nuevo en cada lanzamiento.
 
 La contraseña del docente nunca sale de Moodle. Se descartó a propósito
 depender de los servicios web *core* de Moodle (requeriría habilitarlos y

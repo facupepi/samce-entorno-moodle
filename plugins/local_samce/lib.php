@@ -34,3 +34,40 @@ function local_samce_extend_navigation_course(navigation_node $navigation, stdCl
         new pix_icon('i/report', '')
     );
 }
+
+/**
+ * Agrega el link al panel general SAMCE (todos los cursos donde el usuario
+ * tiene local/samce:viewpanel) a la navegación global, para que el docente
+ * pueda acceder sin depender de estar parado en un curso puntual. Moodle
+ * llama a esta función automáticamente por convención de nombre, igual que
+ * local_samce_extend_navigation_course().
+ *
+ * get_user_capability_course() resuelve de una sola consulta en qué cursos
+ * tiene la capability, así que no hace falta guardar en ningún lado la
+ * relación docente-curso: Moodle sigue siendo la única fuente de verdad.
+ *
+ * @param global_navigation $navigation
+ */
+function local_samce_extend_navigation(global_navigation $navigation) {
+    global $USER;
+
+    if (!isloggedin() || isguestuser()) {
+        return;
+    }
+
+    $courses = get_user_capability_course('local/samce:viewpanel', $USER->id, true, 'shortname,fullname');
+    if (empty($courses)) {
+        return;
+    }
+
+    $url = new moodle_url('/local/samce/launch_global.php');
+
+    $navigation->add(
+        get_string('viewpanelgeneral', 'local_samce'),
+        $url,
+        navigation_node::TYPE_CUSTOM,
+        null,
+        'local_samce_launch_global',
+        new pix_icon('i/report', '')
+    );
+}
