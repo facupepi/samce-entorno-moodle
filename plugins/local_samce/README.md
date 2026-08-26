@@ -4,9 +4,17 @@ SAMCE - Plugin de Moodle (local_samce) para captura de eventos de interaccion
 
 ## Estado actual
 
-Implementado hasta ahora: el lanzamiento firmado del panel docente, prerequisito
-de HU01 (autenticación del docente) y de la HU02 reformulada. Todavía no hay
-nada del módulo de captura de eventos del alumno (eso es Sprint 2, TT_S2).
+Implementado hasta ahora:
+
+1. El lanzamiento firmado del panel docente (prerequisito de HU01 y HU02).
+2. El registro automático de sesiones de examen (HU02, SAMCE-8): un observer
+   escucha cuando un alumno arranca o entrega un intento de examen, y avisa
+   a `samce-backend` — sin ninguna acción manual ni del docente ni del
+   alumno.
+
+Todavía no hay nada del módulo de captura de eventos de comportamiento del
+alumno (foco, tecleo, mouse) ni de la conexión WebSocket — eso es HU10,
+Sprint 2, sin empezar.
 
 ## Cómo funciona el lanzamiento al panel
 
@@ -27,15 +35,34 @@ emitir un token de alcance amplio); en su lugar, el propio plugin expone
 justo lo necesario, para que la instalación siga siendo un pedido acotado y
 auditable ante el Campus Virtual real.
 
+## Cómo funciona el registro automático de sesiones (HU02)
+
+`classes/observer.php` escucha dos eventos internos de Moodle:
+
+1. `\mod_quiz\event\attempt_started` — el alumno arrancó el examen. Arma un
+   payload (id de intento, id de alumno, curso, id de la instancia del
+   examen en Moodle —no el cmid—, nombre) y
+   lo firma con `token_signer` — mismo mecanismo que el lanzamiento del
+   docente, mismo secreto (`launchsecret`).
+2. `\mod_quiz\event\attempt_submitted` — el alumno entregó.
+
+En los dos casos, hace un POST servidor-a-servidor a `samce-backend`
+(`POST /sessions/moodle-event`), sin que el alumno vea ni haga nada
+distinto de lo que hace hoy. El backend valida la firma y abre o cierra la
+sesión.
+
 ## Configuración
 
 En Site administration → Plugins → Local plugins → SAMCE:
 
 - **Launch shared secret**: tiene que coincidir exactamente con
   `MOODLE_LAUNCH_SECRET` en `samce-backend`. Generar con
-  `openssl rand -hex 32` y no versionarlo en ningún lado.
+  `openssl rand -hex 32` y no versionarlo en ningún lado. La usan tanto el
+  lanzamiento del docente como los eventos de examen.
 - **Teacher panel callback URL**: URL del callback de autenticación del
   panel (`https://<dominio-del-panel>/auth/callback`).
+- **Backend events URL**: URL del endpoint de eventos del backend
+  (`https://<dominio-del-backend>/sessions/moodle-event`).
 
 ## Instalación en la réplica local (Docker/Railway)
 

@@ -25,4 +25,12 @@ if ($hassiteconfig) {
         'https://samce-teacher-dashboard.vercel.app/auth/callback',
         PARAM_URL
     ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_samce/backendurl',
+        get_string('backendurl', 'local_samce'),
+        get_string('backendurl_desc', 'local_samce'),
+        'https://samce-backend-production.up.railway.app/sessions/moodle-event',
+        PARAM_URL
+    ));
 }

@@ -16,3 +16,5 @@ $string['panelurl'] = 'URL de callback del panel docente';
 $string['panelurl_desc'] = 'URL completa del callback de autenticación del panel docente SAMCE, adonde se envía el token de lanzamiento firmado como parámetro.';
 $string['missingsecret'] = 'Todavía no se configuró el secreto de lanzamiento de local_samce (Administración del sitio > Plugins > Plugins locales > SAMCE).';
 $string['missingpanelurl'] = 'Todavía no se configuró la URL del panel docente en local_samce (Administración del sitio > Plugins > Plugins locales > SAMCE).';
+$string['backendurl'] = 'URL de eventos del backend';
+$string['backendurl_desc'] = 'URL completa del endpoint de samce-backend que recibe los eventos de intento de examen (POST /sessions/moodle-event). Se usa servidor a servidor, el alumno nunca la ve.';
