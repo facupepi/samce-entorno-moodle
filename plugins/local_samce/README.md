@@ -23,7 +23,9 @@ Sprint 2, sin empezar.
    `local/samce:viewpanel` (docentes por defecto — ver `db/access.php`).
 2. Al hacer clic, `launch.php` corre dentro de una sesión ya autenticada de
    Moodle (`require_login()`), vuelve a chequear la capability, arma un
-   payload con la identidad del docente y lo firma con
+   payload con la identidad del docente (`$USER`) y del curso (`$course`,
+   incluyendo `display_name` y `course_name` para que el panel muestre el
+   nombre real y no solo identificadores internos de Moodle) y lo firma con
    `classes/token_signer.php` (HMAC-SHA256, TTL de 60 segundos).
 3. Redirige al panel docente (`samce-teacher-dashboard`) con el token en la
    query string. El backend (`samce-backend`) lo valida en
