@@ -56,7 +56,6 @@ $claims = [
     'username'       => $USER->username,
     'display_name'   => fullname($USER),
     'role'           => 'docente',
-    'course_ids'     => array_column($courseclaims, 'id'),
     'courses'        => $courseclaims,
     'iat'            => $now,
     'exp'            => $now + LAUNCH_TOKEN_TTL_SECONDS,

@@ -43,8 +43,8 @@ parado en ninguno.
 
 Al hacer clic, `launch_global.php` resuelve con
 `get_user_capability_course()` en qué cursos el usuario tiene esa
-capability, y arma el token con `course_ids` y `courses` (id + nombre de
-cada uno) en vez del `course_id`/`course_name` único de `launch.php`. Esto
+capability, y arma el token con `courses` (id + nombre de cada uno) en vez
+del `course_id`/`course_name` único de `launch.php`. Esto
 no requiere guardar en ningún lado la relación docente-curso: Moodle sigue
 siendo la única fuente de verdad, resuelta de nuevo en cada lanzamiento.
 
