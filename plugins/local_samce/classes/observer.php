@@ -65,11 +65,21 @@ class observer {
 
         $cm = get_coursemodule_from_id('quiz', (int) $event->contextinstanceid, 0, false, IGNORE_MISSING);
 
+        // El nombre del alumno nunca viajaba (detectado por Facu en
+        // revisión): el backend solo recibía moodle_user_id, y el panel no
+        // tenía ningún dato legible para mostrar. Se agrega acá porque acá
+        // es donde Moodle todavía tiene al alumno identificado de forma
+        // confiable ($event->relateduserid) — el backend lo cifra igual que
+        // el id antes de persistirlo (ver moodle_event.go).
+        $student = \core_user::get_user((int) $event->relateduserid);
+        $studentname = $student ? fullname($student) : '';
+
         $now = time();
         $claims = [
             'event_type'        => $eventtype,
             'moodle_attempt_id' => (int) $event->objectid,
             'moodle_user_id'    => (int) $event->relateduserid,
+            'student_name'      => $studentname,
             'course_id'         => (int) $event->courseid,
             'quiz_id'           => $cm ? (int) $cm->instance : 0,
             'quiz_name'         => $cm ? format_string($cm->name) : '',
