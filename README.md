@@ -40,6 +40,19 @@ mirar.
 Esa copia es un espejo del repositorio del complemento, no su origen. Cuando el
 complemento cambia, se vuelve a copiar acá y se sube la versión.
 
+Ese espejo es la única parte del entorno que puede quedar atrasada sin que nada
+avise: el sitio levanta igual con una copia vieja, sólo que comportándose como
+el complemento de la semana pasada. Para comprobar que está al día, con los dos
+repositorios clonados al lado:
+
+```bash
+diff -r plugins/local_samce ../samce-moodle-plugin      --exclude=.git --exclude=README.md
+```
+
+Sin salida quiere decir que la copia coincide con el original. Si aparece algo,
+se copia de nuevo y se sube `$plugin->version` en `version.php`, que es lo que
+hace que Moodle registre la actualización al arrancar.
+
 ---
 
 ## Requisitos
