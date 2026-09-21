@@ -8,7 +8,11 @@
  * cada cambio lleva su origen: "api" o "size".
  *
  * CONEXIÓN. Explica los huecos de eventos, y evita leer como sospechosa una
- * pausa que en realidad fue una caída de red.
+ * pausa que en realidad fue una caída de red. Acá solo se informa lo que dice
+ * el navegador (source "browser"), que no es confiable: no dispara "offline" si
+ * la máquina conserva otra interfaz de red o si lo que se perdió es internet y
+ * no la conexión local. Por eso capture.js además lo deduce de los envíos
+ * fallidos (source "send").
  *
  * PERFIL. Una sola vez por intento, para trazabilidad: familia y versión mayor
  * del navegador, y si el dispositivo es táctil. No se guarda el user agent
@@ -98,10 +102,10 @@ define('local_samce/sig_window', [], function() {
         });
 
         var onOnline = env.safe(function() {
-            env.emit('connection', {online: true});
+            env.emit('connection', {online: true, source: 'browser'});
         });
         var onOffline = env.safe(function() {
-            env.emit('connection', {online: false});
+            env.emit('connection', {online: false, source: 'browser'});
         });
 
         win.addEventListener('resize', onResize);

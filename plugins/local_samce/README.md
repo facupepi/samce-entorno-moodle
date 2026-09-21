@@ -83,7 +83,7 @@ página del intento (JS)  ──►  Moodle: lib/ajax/service.php  ──►  sa
 | RF08 | cadencia de tecleo agregada por pregunta: inserciones, borrados, de dónde vino lo insertado (tipeo, pegado, arrastre, autocompletado), tiempos entre entradas y pausas |
 | RF09 | movimiento del mouse muestreado, inactividad, salida y entrada del cursor en la ventana, y tiempo que cada pregunta estuvo a la vista (se acumula y se informa cuando la pregunta sale de la vista, al cambiar o cerrar la página, o como mucho cada minuto) |
 | RF10 | copiar, cortar y pegar (con la longitud, nunca el texto), pantalla completa y tamaño de ventana |
-| RF11 | conexión perdida y recuperada; perfil del cliente (familia y versión mayor del navegador, si es táctil) una vez por intento |
+| RF11 | conexión perdida y recuperada (la que informa el navegador y, además, la que se deduce de dos envíos fallidos seguidos, porque el navegador no siempre dispara `offline`); perfil del cliente (familia y versión mayor del navegador, si es táctil) una vez por intento |
 
 **Privacidad.** No se guarda qué tecla se apretó ni el texto que hay en el
 cuadro. Del tecleo se cuentan inserciones y borrados; del portapapeles, la
@@ -103,8 +103,13 @@ de un iframe no llegan a un listener puesto en la página. `amd/src/frames.js`
 engancha los detectores también dentro de esos iframes, y los vuelve a enganchar
 si el editor reescribe su documento. Con ese mismo editor, hacer clic para
 escribir hace que la ventana reciba un `blur` sin que el alumno haya salido
-del examen; `sig_focus.js` lo descarta porque `document.hasFocus()` sigue
-siendo verdadero mientras el foco está dentro de un iframe de la página.
+del examen, y al revés: con el foco dentro del editor, el `blur` del cambio de
+aplicación le llega a la ventana del iframe y no a la principal. `sig_focus.js`
+resuelve las dos cosas leyendo `document.hasFocus()` (que sigue siendo
+verdadero mientras el foco está dentro de un iframe de la página, y falso
+cuando la ventana pierde el foco de verdad), escuchando `blur` y `focus`
+también dentro de los iframes de los editores, y sondeándolo una vez por
+segundo por si algún evento no llega.
 
 **Nada de esto puede afectar el examen.** Cada detector corre envuelto en un
 `try/catch`; el envío tiene tiempo límite y no muestra mensajes; el hook ignora
