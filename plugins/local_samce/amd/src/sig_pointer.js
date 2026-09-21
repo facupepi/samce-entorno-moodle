@@ -15,6 +15,12 @@
  * pestaña a la vista. Sirve igual con una pregunta por página que con varias
  * en la misma, donde el momento en que carga la página no dice nada.
  *
+ * El tiempo se acumula y NO se informa en cada vaciado: se informa cuando la
+ * pregunta sale de la vista, cuando se cambia de página o se cierra (el
+ * vaciado final), o, como mucho, cada minuto. Informarlo cada 5 segundos
+ * llenaba la lista de filas casi iguales sin decir nada más: en un examen de
+ * dos horas eran más de mil por pregunta, y ocultaban lo importante.
+ *
  * @module     local_samce/sig_pointer
  * @copyright  SAMCE
  */
@@ -28,6 +34,8 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
     var MIN_DWELL_MS = 500;
     /** Tope de un solo intervalo: si la máquina se durmió, no se cuenta todo lo que pasó dormida. */
     var MAX_TICK_MS = 2000;
+    /** Lo más que se guarda, sin informarlo, el tiempo de una pregunta que sigue a la vista. */
+    var MAX_HOLD_MS = 60000;
 
     var isMostlyVisible = function(win, element) {
         var rect = element.getBoundingClientRect();
@@ -72,7 +80,9 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
             env.emit('mouse_enter', {});
         });
 
-        // Tiempo a la vista por pregunta, muestreado una vez por segundo.
+        // Tiempo a la vista por pregunta, muestreado una vez por segundo. Cada
+        // entrada guarda cuánto se acumuló sin informar (ms), desde cuándo
+        // (since) y si la pregunta sigue a la vista (inView).
         var dwell = new Map();
         var lastTickAt = env.now();
         var tick = env.safe(function() {
@@ -82,6 +92,9 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
             if (doc.hidden) {
                 return;
             }
+            dwell.forEach(function(entry) {
+                entry.inView = false;
+            });
             Array.prototype.forEach.call(doc.querySelectorAll('.que'), function(question) {
                 if (!isMostlyVisible(win, question)) {
                     return;
@@ -90,8 +103,9 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 if (context.slot === undefined) {
                     return;
                 }
-                var entry = dwell.get(context.slot) || {context: context, ms: 0};
+                var entry = dwell.get(context.slot) || {context: context, ms: 0, since: now, inView: true};
                 entry.ms += elapsed;
+                entry.inView = true;
                 dwell.set(context.slot, entry);
             });
         });
@@ -109,7 +123,13 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 };
             },
 
-            flush: function() {
+            /**
+             * @param {Object} [options]
+             * @param {boolean} [options.final] la página se está cerrando o
+             *        ocultando: lo que quedó acumulado se informa ya.
+             */
+            flush: function(options) {
+                var final = !!(options && options.final);
                 tick();
 
                 var now = env.now();
@@ -122,12 +142,21 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                     idleReported = true;
                 }
 
-                dwell.forEach(function(entry) {
+                dwell.forEach(function(entry, slot) {
+                    var due = final || !entry.inView || now - entry.since >= MAX_HOLD_MS;
+                    if (!due) {
+                        return;
+                    }
                     if (entry.ms >= MIN_DWELL_MS) {
                         env.emit('question_time', QuestionContext.withContext({ms: entry.ms}, entry.context));
                     }
+                    if (final || !entry.inView) {
+                        dwell.delete(slot);
+                    } else {
+                        entry.ms = 0;
+                        entry.since = now;
+                    }
                 });
-                dwell.clear();
             },
 
             stop: function() {
