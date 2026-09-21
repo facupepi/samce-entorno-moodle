@@ -44,13 +44,14 @@ define('local_samce/queue', [], function() {
         var last = 0;
         var pending = [];
         var profileSent = false;
+        var lost = false;
 
         var save = function() {
             if (!storage) {
                 return;
             }
             try {
-                storage.setItem(key, JSON.stringify({last: last, pending: pending, profileSent: profileSent}));
+                storage.setItem(key, JSON.stringify({last: last, pending: pending, profileSent: profileSent, lost: lost}));
             } catch (e) {
                 // Sin almacenamiento (modo privado, cuota llena) la cola sigue funcionando en memoria.
             }
@@ -69,10 +70,12 @@ define('local_samce/queue', [], function() {
                 last = typeof state.last === 'number' ? state.last : 0;
                 pending = Array.isArray(state.pending) ? state.pending : [];
                 profileSent = state.profileSent === true;
+                lost = state.lost === true;
             } catch (e) {
                 last = 0;
                 pending = [];
                 profileSent = false;
+                lost = false;
             }
         };
 
@@ -135,6 +138,16 @@ define('local_samce/queue', [], function() {
 
             markProfileSent: function() {
                 profileSent = true;
+                save();
+            },
+
+            /** Si ya se informó que los envíos vienen fallando (y todavía no que volvieron). */
+            isLost: function() {
+                return lost;
+            },
+
+            setLost: function(value) {
+                lost = value === true;
                 save();
             }
         };

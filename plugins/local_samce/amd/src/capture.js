@@ -36,6 +36,8 @@ define('local_samce/capture', [
     var BACKOFF_MAX_MS = 30000;
     /** Tope de lotes seguidos en un mismo vaciado, para no monopolizar la página. */
     var MAX_BATCHES_PER_FLUSH = 5;
+    /** Cuántos envíos fallidos seguidos hacen falta para dar por perdida la conexión. */
+    var LOST_AFTER_FAILURES = 2;
 
     /**
      * Arranca la captura. Recibe todo lo que toca del navegador, para poder
@@ -155,7 +157,11 @@ define('local_samce/capture', [
                 safe(signal.flush)({final: !!flushOptions.keepalive});
             });
 
-            if (sending || queue.size() === 0) {
+            // El vaciado final sale aunque haya un envío en curso: la página se
+            // está yendo y lo que se acumuló desde entonces no tendría otra
+            // oportunidad. Repetir el principio de la cola no hace daño, el
+            // backend descarta lo que ya tiene (clave única por sesión y seq).
+            if ((sending && !flushOptions.keepalive) || queue.size() === 0) {
                 return Promise.resolve();
             }
             if (!flushOptions.force && now() < retryAt) {
@@ -181,12 +187,23 @@ define('local_samce/capture', [
                     }
                     if (status === 'retry') {
                         failures += 1;
+                        // El navegador no siempre avisa que se cortó la conexión
+                        // (no dispara "offline" si queda otra interfaz de red o si
+                        // lo que se perdió es internet): se deduce de los envíos.
+                        if (failures >= LOST_AFTER_FAILURES && !queue.isLost()) {
+                            queue.setLost(true);
+                            env.emit('connection', {online: false, source: 'send'});
+                        }
                         retryAt = now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
                         return;
                     }
 
                     // 'ok', o 'rejected' (que no mejora reintentando): el lote sale de la cola.
                     queue.drop(batch.length);
+                    if (queue.isLost()) {
+                        queue.setLost(false);
+                        env.emit('connection', {online: true, source: 'send'});
+                    }
                     failures = 0;
                     retryAt = 0;
                     batchesLeft -= 1;
