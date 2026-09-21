@@ -81,7 +81,7 @@ página del intento (JS)  ──►  Moodle: lib/ajax/service.php  ──►  sa
 |---|---|
 | RF07 | pérdida y recuperación de foco de la ventana; pestaña oculta y visible |
 | RF08 | cadencia de tecleo agregada por pregunta: inserciones, borrados, de dónde vino lo insertado (tipeo, pegado, arrastre, autocompletado), tiempos entre entradas y pausas |
-| RF09 | movimiento del mouse muestreado, inactividad, salida y entrada del cursor en la ventana, y tiempo que cada pregunta estuvo a la vista |
+| RF09 | movimiento del mouse muestreado, inactividad, salida y entrada del cursor en la ventana, y tiempo que cada pregunta estuvo a la vista (se acumula y se informa cuando la pregunta sale de la vista, al cambiar o cerrar la página, o como mucho cada minuto) |
 | RF10 | copiar, cortar y pegar (con la longitud, nunca el texto), pantalla completa y tamaño de ventana |
 | RF11 | conexión perdida y recuperada; perfil del cliente (familia y versión mayor del navegador, si es táctil) una vez por intento |
 

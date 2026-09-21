@@ -149,8 +149,10 @@ define('local_samce/capture', [
                 return Promise.resolve();
             }
 
+            // Con la página cerrándose u ocultándose, los detectores informan ya
+            // lo que tienen acumulado (por ejemplo, el tiempo de cada pregunta).
             signals.forEach(function(signal) {
-                safe(signal.flush)();
+                safe(signal.flush)({final: !!flushOptions.keepalive});
             });
 
             if (sending || queue.size() === 0) {
