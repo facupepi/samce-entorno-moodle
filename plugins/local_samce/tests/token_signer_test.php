@@ -4,6 +4,7 @@ namespace local_samce;
 
 defined('MOODLE_INTERNAL') || die();
 
+global $CFG;
 require_once($CFG->dirroot . '/local/samce/classes/token_signer.php');
 
 /**

@@ -71,6 +71,15 @@ php /var/www/html/admin/cli/cfg.php --name=theme --set=adaptable
 echo "=== Registrando complementos (idempotente) ==="
 php /var/www/html/admin/cli/upgrade.php --non-interactive || true
 
+# La captura de eventos de interacción de local_samce viene apagada por defecto.
+# Si SAMCE_CAPTURE_ENABLED está definida (1 la enciende, 0 la apaga), se aplica
+# en cada arranque; sin la variable no se toca lo que se haya configurado desde
+# la pantalla de administración del complemento.
+if [ -n "${SAMCE_CAPTURE_ENABLED:-}" ]; then
+    echo "=== local_samce: capture_enabled=${SAMCE_CAPTURE_ENABLED} ==="
+    php /var/www/html/admin/cli/cfg.php --component=local_samce --name=capture_enabled --set="${SAMCE_CAPTURE_ENABLED}"
+fi
+
 echo "=== Cargando curso, usuarios y evaluación de prueba (idempotente) ==="
 cp /opt/samce/samce_setup.php /var/www/html/samce_setup.php
 cp /opt/samce/samce_preguntas.php /var/www/html/samce_preguntas.php

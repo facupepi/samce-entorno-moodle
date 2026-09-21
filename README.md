@@ -46,7 +46,7 @@ el complemento de la semana pasada. Para comprobar que está al día, con los do
 repositorios clonados al lado:
 
 ```bash
-diff -r plugins/local_samce ../samce-moodle-plugin      --exclude=.git --exclude=README.md
+diff -r plugins/local_samce ../samce-moodle-plugin      --exclude=.git --exclude=README.md --exclude=dev --exclude=.github --exclude=node_modules
 ```
 
 Sin salida quiere decir que la copia coincide con el original. Si aparece algo,
@@ -145,6 +145,12 @@ Lo que no puede hacer en el build lo hace `deploy/entrypoint.sh` en cada
 arranque, porque depende de la base de datos: espera a MySQL, instala el esquema
 si la base está vacía, y después aplica el idioma, el tema, el registro de
 complementos, el contenido de prueba y la identidad visual.
+
+**La captura de eventos de interacción del alumno** (`local_samce`) viene
+apagada por defecto. En la versión publicada se enciende con la variable de
+entorno `SAMCE_CAPTURE_ENABLED=1`, que `deploy/entrypoint.sh` aplica en cada
+arranque; con `0` se apaga, y sin la variable no se toca lo que se haya
+configurado desde la pantalla de administración del complemento.
 
 **Todos esos pasos son idempotentes**, y eso es lo que hace que el entorno
 publicado sea reproducible: cada arranque deja el sitio en el mismo estado sin
