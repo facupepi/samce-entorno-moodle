@@ -33,4 +33,11 @@ if ($hassiteconfig) {
         'https://samce-backend-production.up.railway.app/sessions/moodle-event',
         PARAM_URL
     ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_samce/capture_enabled',
+        get_string('captureenabled', 'local_samce'),
+        get_string('captureenabled_desc', 'local_samce'),
+        0
+    ));
 }

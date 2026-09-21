@@ -21,6 +21,12 @@ class observer {
      * del docente. */
     const EVENT_TOKEN_TTL_SECONDS = 60;
 
+    /** Segundos que se espera para conectar con el backend. */
+    const REQUEST_CONNECT_TIMEOUT_SECONDS = 2;
+
+    /** Segundos que se espera, en total, por la respuesta del backend. */
+    const REQUEST_TIMEOUT_SECONDS = 3;
+
     /**
      * El alumno arrancó un intento de examen.
      *
@@ -92,7 +98,15 @@ class observer {
         require_once($CFG->libdir . '/filelib.php');
         $curl = new \curl();
         $curl->setHeader('Content-Type: application/json');
-        $curl->post($backendurl, json_encode(['token' => $token]));
+        // Con timeouts propios: sin ellos el POST espera hasta 30 segundos
+        // para conectar y no tiene límite total de respuesta, y como el aviso
+        // de inicio sale mientras el alumno abre el examen, un backend que
+        // acepta la conexión y no contesta lo dejaría esperando. Ninguna falla
+        // del monitoreo puede demorar el examen.
+        $curl->post($backendurl, json_encode(['token' => $token]), [
+            'CURLOPT_CONNECTTIMEOUT' => self::REQUEST_CONNECT_TIMEOUT_SECONDS,
+            'CURLOPT_TIMEOUT'        => self::REQUEST_TIMEOUT_SECONDS,
+        ]);
 
         if ($curl->get_errno()) {
             debugging('local_samce: fallo al notificar el evento "' . $eventtype . '" al backend: ' .
