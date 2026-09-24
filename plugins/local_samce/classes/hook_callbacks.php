@@ -54,9 +54,17 @@ class hook_callbacks {
                 return;
             }
 
-            $PAGE->requires->js_call_amd('local_samce/capture', 'init', [[
-                'attemptid' => (int) $attempt->id,
-                'flushms'   => self::FLUSH_INTERVAL_MS,
+            // Se carga consent, no capture directo: HU11 (RF05) exige que la
+            // captura no arranque sin la aceptación explícita del alumno. Es
+            // consent.js el que decide, ya en el navegador, si hace falta
+            // mostrar el aviso o si alcanza con arrancar la captura.
+            $PAGE->requires->js_call_amd('local_samce/consent', 'init', [[
+                'attemptid'     => (int) $attempt->id,
+                'flushms'       => self::FLUSH_INTERVAL_MS,
+                'noticetitle'   => get_string('consentnoticetitle', 'local_samce'),
+                'noticebody'    => get_string('consentnoticebody', 'local_samce'),
+                'noticeaccept'  => get_string('consentaccept', 'local_samce'),
+                'indicatortext' => get_string('indicatortext', 'local_samce'),
             ]]);
         } catch (\Throwable $e) {
             debugging('local_samce: no se pudo cargar la captura de eventos: ' . $e->getMessage(), DEBUG_NORMAL);

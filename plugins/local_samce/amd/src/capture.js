@@ -21,11 +21,12 @@ define('local_samce/capture', [
     'local_samce/queue',
     'local_samce/transport',
     'local_samce/frames',
+    'local_samce/indicator',
     'local_samce/sig_focus',
     'local_samce/sig_input',
     'local_samce/sig_pointer',
     'local_samce/sig_window'
-], function(Queue, Transport, Frames, SigFocus, SigInput, SigPointer, SigWindow) {
+], function(Queue, Transport, Frames, Indicator, SigFocus, SigInput, SigPointer, SigWindow) {
     'use strict';
 
     var DEFAULT_FLUSH_MS = 5000;
@@ -51,6 +52,11 @@ define('local_samce/capture', [
      * @param {number} options.attemptId
      * @param {number} [options.flushMs]
      * @param {Function} [options.now]
+     * @param {boolean} [options.consentAcceptedAt] el alumno acaba de aceptar
+     *        el aviso (HU11): emite el evento consent_accepted. false en las
+     *        páginas siguientes del mismo intento, cuando local_samce/consent
+     *        ya lo había registrado antes.
+     * @param {string} [options.indicatorText] texto del indicador de HU12.
      * @return {Object} {stop, flush, queue}
      */
     var start = function(options) {
@@ -122,6 +128,20 @@ define('local_samce/capture', [
             queue.markProfileSent();
         }
 
+        // HU11 (RF05, criterio 3): la aceptación explícita se registra como un
+        // evento más, con su marca temporal (occurred_at/received_at), sin
+        // tabla ni endpoint nuevo. Solo llega acá cuando consent.js acaba de
+        // recibir el click de "Acepto" — en las páginas siguientes del mismo
+        // intento no se repite (ver local_samce/consent).
+        if (options.consentAcceptedAt) {
+            env.emit('consent_accepted', {});
+        }
+
+        // HU12 (RF06): indicador visible y persistente mientras la captura
+        // esté realmente activa. Arranca junto con la captura (que, por HU11,
+        // nunca arranca sin la aceptación) y se cae en stop().
+        var indicator = Indicator.show(doc, options.indicatorText);
+
         var stop = function() {
             if (stopped) {
                 return;
@@ -132,6 +152,7 @@ define('local_samce/capture', [
                 signal.stop();
             });
             frames.stop();
+            indicator.remove();
             win.removeEventListener('pagehide', onPageHide);
             win.removeEventListener('online', onOnline);
             doc.removeEventListener('visibilitychange', onVisibility);
@@ -253,6 +274,8 @@ define('local_samce/capture', [
          * @param {Object} config
          * @param {number} config.attemptid
          * @param {number} [config.flushms]
+         * @param {boolean} [config.consentacceptedat] ver options.consentAcceptedAt de start().
+         * @param {string} [config.indicatortext] ver options.indicatorText de start().
          * @return {Object|null} la captura en marcha, o null si no arrancó.
          */
         init: function(config) {
@@ -275,6 +298,8 @@ define('local_samce/capture', [
                     storage: storage,
                     attemptId: config.attemptid,
                     flushMs: config.flushms,
+                    consentAcceptedAt: !!config.consentacceptedat,
+                    indicatorText: config.indicatortext,
                     transport: Transport.create({wwwroot: moodleConfig.wwwroot, sesskey: moodleConfig.sesskey})
                 });
             } catch (e) {
