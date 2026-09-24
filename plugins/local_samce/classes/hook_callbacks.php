@@ -46,6 +46,14 @@ class hook_callbacks {
         global $DB, $PAGE, $USER;
 
         try {
+            // La página del cuestionario (donde está "Comenzar intento") no
+            // captura nada: solo pide el consentimiento antes de que Moodle cree
+            // el intento.
+            if ($PAGE->pagetype === 'mod-quiz-view') {
+                self::load_start_gate();
+                return;
+            }
+
             if (!in_array($PAGE->pagetype, self::MONITORED_PAGETYPES, true)) {
                 return;
             }
@@ -99,6 +107,7 @@ class hook_callbacks {
             // mostrar el aviso o si alcanza con arrancar la captura.
             $PAGE->requires->js_call_amd('local_samce/consent', 'init', [[
                 'attemptid'     => (int) $attempt->id,
+                'cmid'          => $PAGE->cm ? (int) $PAGE->cm->id : 0,
                 'flushms'       => self::FLUSH_INTERVAL_MS,
                 'noticetitle'   => get_string('consentnoticetitle', 'local_samce'),
                 'noticebody'    => get_string('consentnoticebody', 'local_samce'),
@@ -113,5 +122,57 @@ class hook_callbacks {
         } catch (\Throwable $e) {
             debugging('local_samce: no se pudo cargar la captura de eventos: ' . $e->getMessage(), DEBUG_NORMAL);
         }
+    }
+    /**
+     * En la página del cuestionario: si el alumno va a poder rendir con
+     * monitoreo, pide el consentimiento antes de que Moodle cree el intento
+     * (ver local_samce/consent_gate); si su navegador no es admitido, le avisa
+     * ahí mismo en vez de dejarlo empezar.
+     *
+     * Solo para quien puede rendir y no es docente: un usuario con el permiso de
+     * vista previa (docentes, administradores) no ve ningún aviso.
+     */
+    private static function load_start_gate(): void {
+        global $DB, $PAGE, $USER;
+
+        if (!isloggedin() || isguestuser() || !get_config('local_samce', 'capture_enabled') || !$PAGE->cm) {
+            return;
+        }
+        $secret = get_config('local_samce', 'launchsecret');
+        $eventsurl = event_batch::events_url((string) get_config('local_samce', 'backendurl'));
+        if (empty($secret) || $eventsurl === '') {
+            return;
+        }
+        $context = $PAGE->context;
+        if (!has_capability('mod/quiz:attempt', $context) || has_capability('mod/quiz:preview', $context)) {
+            return;
+        }
+
+        $restrict = get_config('local_samce', 'restrict_browser');
+        if (($restrict === false || (string) $restrict !== '0') &&
+                !browser_check::is_supported((string) \core_useragent::get_user_agent_string())) {
+            $PAGE->requires->js_call_amd('local_samce/blocked', 'init', [[
+                'title'   => get_string('browserblockedtitle', 'local_samce'),
+                'body'    => get_string('browserblockedbody', 'local_samce'),
+                'back'    => get_string('browserblockedback', 'local_samce'),
+                'backurl' => (new \moodle_url('/course/view.php', ['id' => $PAGE->course->id]))->out(false),
+            ]]);
+            return;
+        }
+
+        // El intento en curso del alumno, si tiene uno: retomarlo no vuelve a
+        // pedir el consentimiento en el navegador donde ya aceptó.
+        $unfinished = $DB->get_field_select('quiz_attempts', 'id',
+            'quiz = :quiz AND userid = :userid AND state = :state AND preview = 0',
+            ['quiz' => $PAGE->cm->instance, 'userid' => $USER->id, 'state' => 'inprogress']);
+
+        $PAGE->requires->js_call_amd('local_samce/consent_gate', 'init', [[
+            'cmid'                => (int) $PAGE->cm->id,
+            'unfinishedattemptid' => $unfinished ? (int) $unfinished : 0,
+            'noticetitle'         => get_string('consentnoticetitle', 'local_samce'),
+            'noticebody'          => get_string('consentnoticebody', 'local_samce'),
+            'noticeaccept'        => get_string('consentaccept', 'local_samce'),
+            'noticedecline'       => get_string('consentdecline', 'local_samce'),
+        ]]);
     }
 }
