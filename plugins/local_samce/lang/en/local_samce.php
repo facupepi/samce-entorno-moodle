@@ -34,3 +34,5 @@ Legal basis: this data processing takes place under Argentine Law No. 25,326 on 
 You need to accept this notice to start this exam.';
 $string['consentaccept'] = 'I accept';
 $string['indicatortext'] = 'This exam is being monitored';
+$string['taskretryexamevent'] = 'Retry an exam event notice to SAMCE';
+$string['taskretryexameventfailed'] = 'Could not retry the exam event notice to SAMCE';
