@@ -97,6 +97,15 @@ class event_batch_test extends \PHPUnit\Framework\TestCase {
         $this->assertNull(event_batch::parse($this->batch([$this->event(['t' => null])])));
     }
 
+    // Punto 3 de la revisión externa del 23/09/2026: sin este tope, un `t`
+    // corrupto pasaba esta validación y sólo se descubría al insertarlo en
+    // el backend, donde traba la cola del alumno para siempre.
+    public function test_timestamp_out_of_the_valid_timestamp_range_is_rejected(): void {
+        $this->assertNull(event_batch::parse($this->batch([$this->event(['t' => 2208988800000])]))); // año 2040.
+        $this->assertNotNull(event_batch::parse($this->batch([$this->event(['t' => event_batch::MIN_EVENT_TIMESTAMP_MS])])));
+        $this->assertNotNull(event_batch::parse($this->batch([$this->event(['t' => event_batch::MAX_EVENT_TIMESTAMP_MS])])));
+    }
+
     public function test_data_that_is_not_an_object_is_rejected(): void {
         $this->assertNull(event_batch::parse('[{"seq":1,"t":1790000000000,"type":"focus_lost","data":"texto"}]'));
         $this->assertNull(event_batch::parse('[{"seq":1,"t":1790000000000,"type":"focus_lost","data":[1,2]}]'));
