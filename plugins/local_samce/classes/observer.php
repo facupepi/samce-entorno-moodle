@@ -112,9 +112,16 @@ class observer {
             'CURLOPT_TIMEOUT'        => self::REQUEST_TIMEOUT_SECONDS,
         ]);
 
-        if ($curl->get_errno()) {
-            debugging('local_samce: fallo al notificar el evento "' . $eventtype . '" al backend: ' .
-                $curl->error, DEBUG_NORMAL);
+        // get_errno() solo ve fallas de red (no conectó, timeout): un 404 o
+        // un 500 del backend curl lo cuenta como éxito, y hasta ahora no
+        // quedaba ni un debugging() de esa clase de falla (punto 1 de la
+        // revisión externa del 23/09/2026). Sin la sesión que abre este
+        // aviso, todos los lotes de eventos de ese alumno se van a rechazar
+        // después, así que vale la pena verlo en el log del lado de Moodle.
+        $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
+        if ($curl->get_errno() || $httpcode >= 400) {
+            debugging('local_samce: fallo al notificar el evento "' . $eventtype . '" al backend' .
+                ($httpcode ? " (HTTP {$httpcode})" : '') . ': ' . $curl->error, DEBUG_NORMAL);
         }
     }
 }
