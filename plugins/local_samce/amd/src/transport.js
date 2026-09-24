@@ -44,6 +44,9 @@ define('local_samce/transport', [], function() {
              * @param {Object} [sendOptions]
              * @param {boolean} [sendOptions.keepalive] pide al navegador terminar el envío
              *        aunque la página se cierre.
+             * @param {string} [sendOptions.contextId] identifica este contexto de
+             *        captura (una carga de página), para separar pestañas del mismo
+             *        intento.
              * @return {Promise<string>} 'ok', 'disabled', 'rejected' o 'retry'.
              */
             send: function(attemptId, events, sendOptions) {
@@ -58,6 +61,11 @@ define('local_samce/transport', [], function() {
                     }
                 }, timeoutMs);
 
+                var args = {attemptid: attemptId, events: JSON.stringify(events)};
+                if (sendOptions && sendOptions.contextId) {
+                    args.contextid = sendOptions.contextId;
+                }
+
                 var request = {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -65,7 +73,7 @@ define('local_samce/transport', [], function() {
                     body: JSON.stringify([{
                         index: 0,
                         methodname: METHOD,
-                        args: {attemptid: attemptId, events: JSON.stringify(events)}
+                        args: args
                     }])
                 };
                 if (controller) {

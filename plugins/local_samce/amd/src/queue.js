@@ -25,6 +25,15 @@ define('local_samce/queue', [], function() {
      * descartan los más viejos antes que crecer sin límite. */
     var DEFAULT_MAX_PENDING = 500;
 
+    /** Bytes UTF-8 de un texto: lo que cuenta el servidor, no la cantidad de caracteres. */
+    var utf8Length = function(text) {
+        try {
+            return unescape(encodeURIComponent(text)).length;
+        } catch (e) {
+            return text.length;
+        }
+    };
+
     /**
      * @param {Object} options
      * @param {Storage|null} options.storage sessionStorage, o null si no está disponible.
@@ -45,13 +54,19 @@ define('local_samce/queue', [], function() {
         var pending = [];
         var profileSent = false;
         var lost = false;
+        // Cuántos eventos se descartaron sin llegar a salir, por causa. Sin esto
+        // el hueco es indetectable en los datos (seq no es consecutivo) y se lee
+        // como "el alumno no hizo nada" (punto 9 de la revisión externa del 23/09/2026).
+        var dropped = {overflow: 0, rejected: 0};
 
         var save = function() {
             if (!storage) {
                 return;
             }
             try {
-                storage.setItem(key, JSON.stringify({last: last, pending: pending, profileSent: profileSent, lost: lost}));
+                storage.setItem(key, JSON.stringify({
+                    last: last, pending: pending, profileSent: profileSent, lost: lost, dropped: dropped
+                }));
             } catch (e) {
                 // Sin almacenamiento (modo privado, cuota llena) la cola sigue funcionando en memoria.
             }
@@ -71,11 +86,18 @@ define('local_samce/queue', [], function() {
                 pending = Array.isArray(state.pending) ? state.pending : [];
                 profileSent = state.profileSent === true;
                 lost = state.lost === true;
+                if (state.dropped && typeof state.dropped === 'object') {
+                    dropped = {
+                        overflow: Math.max(0, parseInt(state.dropped.overflow, 10) || 0),
+                        rejected: Math.max(0, parseInt(state.dropped.rejected, 10) || 0)
+                    };
+                }
             } catch (e) {
                 last = 0;
                 pending = [];
                 profileSent = false;
                 lost = false;
+                dropped = {overflow: 0, rejected: 0};
             }
         };
 
@@ -97,6 +119,7 @@ define('local_samce/queue', [], function() {
             push: function(type, data) {
                 pending.push({seq: nextSeq(), t: Math.floor(now()), type: type, data: data || {}});
                 if (pending.length > maxPending) {
+                    dropped.overflow += pending.length - maxPending;
                     pending.splice(0, pending.length - maxPending);
                 }
                 save();
@@ -105,11 +128,64 @@ define('local_samce/queue', [], function() {
             /**
              * Devuelve, sin sacarlos, los primeros eventos pendientes.
              *
-             * @param {number} max
+             * @param {number} max cantidad máxima de eventos.
+             * @param {number} [maxBytes] tope de bytes del data del lote. Se corta
+             *        el lote antes de pasarse, para que el plugin y el backend nunca
+             *        rechacen uno por tamaño; el primer evento entra siempre, para
+             *        que uno grande no trabe la cola.
              * @return {Object[]}
              */
-            peek: function(max) {
-                return pending.slice(0, max);
+            peek: function(max, maxBytes) {
+                if (!maxBytes) {
+                    return pending.slice(0, max);
+                }
+                var batch = [];
+                var bytes = 0;
+                for (var i = 0; i < pending.length && batch.length < max; i++) {
+                    var size = utf8Length(JSON.stringify(pending[i].data || {}));
+                    if (batch.length > 0 && bytes + size > maxBytes) {
+                        break;
+                    }
+                    bytes += size;
+                    batch.push(pending[i]);
+                }
+                return batch;
+            },
+
+            /**
+             * Anota eventos descartados sin haber salido.
+             *
+             * @param {string} cause 'overflow' o 'rejected'.
+             * @param {number} count
+             */
+            noteDropped: function(cause, count) {
+                if ((cause === 'overflow' || cause === 'rejected') && count > 0) {
+                    dropped[cause] += count;
+                    save();
+                }
+            },
+
+            /**
+             * Devuelve lo descartado desde la última vez ({count, overflow,
+             * rejected}, solo con las causas que hubo) y lo pone en cero, o
+             * null si no se descartó nada.
+             *
+             * @return {Object|null}
+             */
+            takeDropped: function() {
+                var total = dropped.overflow + dropped.rejected;
+                if (total === 0) {
+                    return null;
+                }
+                var result = {count: total};
+                ['overflow', 'rejected'].forEach(function(cause) {
+                    if (dropped[cause] > 0) {
+                        result[cause] = dropped[cause];
+                    }
+                });
+                dropped = {overflow: 0, rejected: 0};
+                save();
+                return result;
             },
 
             /**

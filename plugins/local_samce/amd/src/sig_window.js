@@ -58,6 +58,14 @@ define('local_samce/sig_window', [], function() {
         var navigatorRef = win.navigator || {};
         var profile = browserOf(navigatorRef.userAgent);
         profile.is_touch = (navigatorRef.maxTouchPoints || 0) > 0;
+        // is_touch da verdadero en cualquier notebook con pantalla táctil, así
+        // que no separa una tablet. El puntero principal (grueso = dedo) y si
+        // hay algún puntero fino (mouse, trackpad) sí. Solo se agregan si el
+        // navegador sabe responder; es un dato de control, no una huella.
+        if (typeof win.matchMedia === 'function') {
+            profile.pointer_coarse = !!win.matchMedia('(pointer: coarse)').matches;
+            profile.any_pointer_fine = !!win.matchMedia('(any-pointer: fine)').matches;
+        }
         return profile;
     };
 

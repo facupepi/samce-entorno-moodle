@@ -25,7 +25,7 @@ $string['captureenabled_desc'] = 'When enabled, technical signals of the student
 $string['consentnoticetitle'] = 'Monitoring notice for this exam';
 $string['consentnoticebody'] = 'This exam uses SAMCE, a system that records certain technical signals of your interaction with the browser while you take it, to assist the academic evaluation process.
 
-What is recorded: window focus and tab visibility changes, mouse and keyboard activity (never what you type), clipboard use (only the number of characters copied or pasted, never the text), window size and fullscreen changes, and the time spent on each question. The content of your answers is never recorded, and no camera, microphone or other device is activated.
+What is recorded: window focus and tab visibility changes, mouse and keyboard activity (never what you type), clipboard use (only the number of characters copied or pasted, never the text), window size and fullscreen changes, the time spent on each question, connection drops and recoveries, and technical details of your device: your browser family and major version, and whether the device is touch-capable. The content of your answers is never recorded, and no camera, microphone or other device is activated.
 
 Who can access it: only the teacher in charge of this course, through a monitoring panel.
 
@@ -33,6 +33,15 @@ Legal basis: this data processing takes place under Argentine Law No. 25,326 on 
 
 You need to accept this notice to start this exam.';
 $string['consentaccept'] = 'I accept';
+$string['consentdecline'] = 'I do not accept';
 $string['indicatortext'] = 'This exam is being monitored';
 $string['taskretryexamevent'] = 'Retry an exam event notice to SAMCE';
 $string['taskretryexameventfailed'] = 'Could not retry the exam event notice to SAMCE';
+$string['privacy:metadata:samce_backend'] = 'The SAMCE monitoring system (samce-backend), to which the plugin sends, server to server, the start and submission of each exam attempt and the technical signals of the student\'s interaction during the attempt.';
+$string['privacy:metadata:samce_backend:attemptid'] = 'The exam attempt identifier.';
+$string['privacy:metadata:samce_backend:userid'] = 'The student\'s Moodle identifier (stored encrypted).';
+$string['privacy:metadata:samce_backend:fullname'] = 'The student\'s full name (stored encrypted).';
+$string['privacy:metadata:samce_backend:courseid'] = 'The course identifier.';
+$string['privacy:metadata:samce_backend:quizid'] = 'The quiz identifier and name, its time limit and its number of questions.';
+$string['privacy:metadata:samce_backend:timestamps'] = 'The time the attempt started and was submitted or abandoned.';
+$string['privacy:metadata:samce_backend:interaction'] = 'Technical signals of the interaction with the browser during the attempt: focus and visibility changes, typing cadence and mouse movement without content, number of characters copied or pasted (never the text), window size and fullscreen, time per question, connection state, browser family and major version, whether the device is touch-capable, and the acceptance of the monitoring notice.';

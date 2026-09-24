@@ -52,11 +52,20 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
      */
     var start = function(env) {
         var windows = new Map();
+        // Cuándo fue la última entrada de texto de cada pregunta. Vive afuera de
+        // la ventana a propósito: la ventana se descarta en cada vaciado, y con
+        // ella se perdía el hueco entre la última tecla de una y la primera de
+        // la siguiente, que es justo la pausa larga que interesa medir.
+        var lastKeyAt = new Map();
 
         var windowFor = function(context) {
             var key = context.slot === undefined ? 'none' : String(context.slot);
             if (!windows.has(key)) {
                 windows.set(key, {
+                    key: key,
+                    startedAt: env.now(),
+                    gapBefore: null,
+                    maxPause: 0,
                     context: context,
                     inserts: 0,
                     deletes: 0,
@@ -93,10 +102,15 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                 }
 
                 var at = env.now();
+                if (acc.last === null && lastKeyAt.has(acc.key)) {
+                    acc.gapBefore = Math.max(0, Math.round(at - lastKeyAt.get(acc.key)));
+                }
+                lastKeyAt.set(acc.key, at);
                 if (acc.last !== null) {
                     var gap = at - acc.last;
                     if (gap >= PAUSE_MS) {
                         acc.pauses += 1;
+                        acc.maxPause = Math.max(acc.maxPause, Math.round(gap));
                     } else if (gap >= 0 && acc.intervals.length < MAX_INTERVALS) {
                         acc.intervals.push(Math.round(gap));
                     }
@@ -104,20 +118,42 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                 acc.last = at;
             });
 
+            /**
+             * Cuántos caracteres hay seleccionados. En un input o textarea
+             * window.getSelection() no devuelve la selección (Chrome, Edge y
+             * Firefox), así que ahí se mide con selectionStart/selectionEnd.
+             * Devuelve null si ninguna de las dos formas da un número: el
+             * evento sale entonces sin `length` y el panel lo muestra sin
+             * cantidad, en vez de afirmar que se copiaron 0 caracteres.
+             */
+            var selectedLength = function(target) {
+                try {
+                    if (target && typeof target.selectionStart === 'number' &&
+                            typeof target.selectionEnd === 'number') {
+                        return Math.max(0, target.selectionEnd - target.selectionStart);
+                    }
+                } catch (e) {
+                    // Algunos tipos de input lanzan al leer la selección.
+                }
+                var view = (root.ownerDocument || root).defaultView;
+                var selection = view && typeof view.getSelection === 'function' ? view.getSelection() : null;
+                return selection ? String(selection).length : null;
+            };
+
             var clipboard = function(action) {
                 return env.safe(function(event) {
-                    var length = 0;
+                    var data = {action: action};
                     if (action === 'paste') {
                         // Solo se mide; el texto pegado no se guarda ni se manda.
                         var pasted = event.clipboardData ? event.clipboardData.getData('text') : '';
-                        length = typeof pasted === 'string' ? pasted.length : 0;
+                        data.length = typeof pasted === 'string' ? pasted.length : 0;
                     } else {
-                        var view = (root.ownerDocument || root).defaultView;
-                        var selection = view && typeof view.getSelection === 'function' ? view.getSelection() : null;
-                        length = selection ? String(selection).length : 0;
+                        var length = selectedLength(event.target);
+                        if (length !== null) {
+                            data.length = length;
+                        }
                     }
-                    env.emit('clipboard', QuestionContext.withContext({action: action, length: length},
-                        QuestionContext.of(event.target, frame)));
+                    env.emit('clipboard', QuestionContext.withContext(data, QuestionContext.of(event.target, frame)));
                 });
             };
 
@@ -147,15 +183,26 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                     var intervals = acc.intervals.slice().sort(function(a, b) {
                         return a - b;
                     });
-                    env.emit('key_activity', QuestionContext.withContext({
+                    var data = {
                         inserts: acc.inserts,
                         deletes: acc.deletes,
                         by_origin: acc.byOrigin,
                         interval_ms: intervals.length ?
                             {min: intervals[0], median: median(intervals), max: intervals[intervals.length - 1]} :
                             {min: 0, median: 0, max: 0},
-                        pauses: acc.pauses
-                    }, acc.context));
+                        pauses: acc.pauses,
+                        // Largo real de la ventana: el normal es de 5 s, pero los
+                        // vaciados por salir de la página o volver la conexión la acortan.
+                        window_ms: Math.round(env.now() - acc.startedAt),
+                        // La pausa más larga dentro de la ventana (pauses solo la cuenta).
+                        max_pause_ms: acc.maxPause
+                    };
+                    // Hueco desde la última entrada de la ventana anterior de esta
+                    // misma pregunta; sin clave si es la primera vez que se teclea.
+                    if (acc.gapBefore !== null) {
+                        data.gap_before_ms = acc.gapBefore;
+                    }
+                    env.emit('key_activity', QuestionContext.withContext(data, acc.context));
                 });
                 windows.clear();
             },

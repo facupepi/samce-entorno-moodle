@@ -15,6 +15,14 @@
  * pestaña a la vista. Sirve igual con una pregunta por página que con varias
  * en la misma, donde el momento en que carga la página no dice nada.
  *
+ * OJO al leerlo: question_time mide EXPOSICIÓN, no dedicación. Con varias
+ * preguntas a la vez en pantalla (un docente que arma un cuestionario con
+ * cuatro por página) el segundo se le suma entero a cada una. Por eso el
+ * evento lleva visible_count, la mayor cantidad de preguntas a la vista en
+ * ese lapso: con él el análisis reparte o descuenta en vez de adivinar. La
+ * dedicación real se estima cruzándolo con key_activity y clipboard de la
+ * misma pregunta.
+ *
  * El tiempo se acumula y NO se informa en cada vaciado: se informa cuando la
  * pregunta sale de la vista, cuando se cambia de página o se cierra (el
  * vaciado final), o, como mucho, cada minuto. Informarlo cada 5 segundos
@@ -58,6 +66,8 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
         var moves = 0;
         var lastSampleAt = 0;
         var lastMoveAt = env.now();
+        var lastFlushAt = env.now();
+        var leftAt = null;
         var longestGap = 0;
         var idleReported = false;
 
@@ -74,10 +84,19 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
         });
 
         var onLeave = env.safe(function() {
+            leftAt = env.now();
             env.emit('mouse_leave', {});
         });
+        // away_ms igual que en sig_focus: la duración viaja en el propio evento
+        // de vuelta y sobrevive aunque falte el de salida. Sin salida previa
+        // (la página se cargó con el cursor afuera) no hay cuánto informar.
         var onEnter = env.safe(function() {
-            env.emit('mouse_enter', {});
+            var data = {};
+            if (leftAt !== null) {
+                data.away_ms = Math.max(0, Math.round(env.now() - leftAt));
+                leftAt = null;
+            }
+            env.emit('mouse_enter', data);
         });
 
         // Tiempo a la vista por pregunta, muestreado una vez por segundo. Cada
@@ -95,6 +114,7 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
             dwell.forEach(function(entry) {
                 entry.inView = false;
             });
+            var visible = [];
             Array.prototype.forEach.call(doc.querySelectorAll('.que'), function(question) {
                 if (!isMostlyVisible(win, question)) {
                     return;
@@ -103,9 +123,14 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 if (context.slot === undefined) {
                     return;
                 }
-                var entry = dwell.get(context.slot) || {context: context, ms: 0, since: now, inView: true};
+                visible.push(context);
+            });
+            visible.forEach(function(context) {
+                var entry = dwell.get(context.slot) ||
+                    {context: context, ms: 0, since: now, inView: true, covisible: 0};
                 entry.ms += elapsed;
                 entry.inView = true;
+                entry.covisible = Math.max(entry.covisible, visible.length);
                 dwell.set(context.slot, entry);
             });
         });
@@ -133,12 +158,17 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 tick();
 
                 var now = env.now();
+                // Largo real de la ventana que resume el evento: el normal es de
+                // 5 s, pero los vaciados por salir de la página o volver la
+                // conexión la acortan.
+                var windowMs = Math.round(now - lastFlushAt);
+                lastFlushAt = now;
                 if (moves > 0) {
-                    env.emit('mouse_activity', {moves: moves, idle_ms: longestGap});
+                    env.emit('mouse_activity', {moves: moves, idle_ms: longestGap, window_ms: windowMs});
                     moves = 0;
                     longestGap = 0;
                 } else if (!idleReported && now - lastMoveAt >= IDLE_MS) {
-                    env.emit('mouse_activity', {moves: 0, idle_ms: now - lastMoveAt});
+                    env.emit('mouse_activity', {moves: 0, idle_ms: now - lastMoveAt, window_ms: windowMs});
                     idleReported = true;
                 }
 
@@ -148,13 +178,15 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                         return;
                     }
                     if (entry.ms >= MIN_DWELL_MS) {
-                        env.emit('question_time', QuestionContext.withContext({ms: entry.ms}, entry.context));
+                        env.emit('question_time', QuestionContext.withContext(
+                            {ms: entry.ms, visible_count: entry.covisible}, entry.context));
                     }
                     if (final || !entry.inView) {
                         dwell.delete(slot);
                     } else {
                         entry.ms = 0;
                         entry.since = now;
+                        entry.covisible = 0;
                     }
                 });
             },
