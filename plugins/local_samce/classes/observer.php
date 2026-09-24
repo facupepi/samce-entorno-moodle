@@ -35,6 +35,19 @@ class observer {
     }
 
     /**
+     * El intento venció o se abandonó sin entregarse. Con overduehandling =
+     * autosubmit (el default de Moodle) el intento vencido dispara
+     * attempt_submitted y este evento no aparece; queda para el autoabandono,
+     * el período de gracia vencido y el examen sin límite de tiempo donde el
+     * alumno se va y no vuelve.
+     *
+     * @param \mod_quiz\event\attempt_abandoned $event
+     */
+    public static function quiz_attempt_abandoned(\mod_quiz\event\attempt_abandoned $event): void {
+        self::notify_backend('attempt_abandoned', $event);
+    }
+
+    /**
      * Arma y firma el payload del evento, y lo manda a samce-backend.
      *
      * El id de examen que persiste el backend es moodle_quiz_id (mdl_quiz.id),
@@ -48,6 +61,8 @@ class observer {
      * trae también el nombre del examen.
      */
     private static function notify_backend(string $eventtype, \core\event\base $event): void {
+        global $DB;
+
         $secret = get_config('local_samce', 'launchsecret');
         $backendurl = get_config('local_samce', 'backendurl');
         if (empty($secret) || empty($backendurl)) {
@@ -67,6 +82,23 @@ class observer {
         $student = \core_user::get_user((int) $event->relateduserid);
         $studentname = $student ? fullname($student) : '';
 
+        // Contexto del cuestionario: sin el límite de tiempo y la cantidad de
+        // preguntas no hay cómo comparar sesiones de exámenes distintos.
+        // timelimit 0 significa "sin límite", y se manda tal cual. Un fallo
+        // acá no puede impedir el aviso: se manda sin esos dos datos.
+        $quizcontext = [];
+        try {
+            if ($cm) {
+                $timelimit = $DB->get_field('quiz', 'timelimit', ['id' => $cm->instance], IGNORE_MISSING);
+                if ($timelimit !== false) {
+                    $quizcontext['quiz_time_limit'] = (int) $timelimit;
+                }
+                $quizcontext['quiz_slot_count'] = (int) $DB->count_records('quiz_slots', ['quizid' => $cm->instance]);
+            }
+        } catch (\Throwable $e) {
+            debugging('local_samce: no se pudo leer el contexto del cuestionario: ' . $e->getMessage(), DEBUG_NORMAL);
+        }
+
         // Sin iat ni exp acá: backend_notifier::send_exam_event() los pone,
         // con la hora del intento que en definitiva se mande (el de ahora, o
         // el de la tarea de reintento si hace falta).
@@ -82,7 +114,11 @@ class observer {
             'course_id'         => (int) $event->courseid,
             'quiz_id'           => $cm ? (int) $cm->instance : 0,
             'quiz_name'         => $cm ? format_string($cm->name) : '',
-        ];
+            // Hora del hecho en Moodle. iat se vuelve a estampar en cada
+            // reintento del cron, así que no sirve para saber cuándo
+            // arrancó o se entregó el intento.
+            'occurred_at'       => (int) $event->timecreated,
+        ] + $quizcontext;
 
         if (backend_notifier::send_exam_event($claims, $secret, $backendurl)) {
             return;

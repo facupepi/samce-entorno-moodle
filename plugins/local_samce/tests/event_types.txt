@@ -1,0 +1,16 @@
+client_profile
+consent_accepted
+events_dropped
+focus_lost
+focus_gained
+visibility_hidden
+visibility_visible
+key_activity
+mouse_activity
+mouse_leave
+mouse_enter
+question_time
+clipboard
+fullscreen
+resize
+connection

@@ -25,7 +25,7 @@ $string['captureenabled_desc'] = 'Si está activada, durante un intento de exame
 $string['consentnoticetitle'] = 'Aviso de monitoreo durante el examen';
 $string['consentnoticebody'] = 'Este examen utiliza SAMCE, un sistema que registra determinadas señales técnicas de tu interacción con el navegador mientras rendís, con el fin de asistir al proceso de evaluación académica.
 
-Qué se registra: cambios de foco de ventana y de pestaña, actividad de mouse y teclado (sin el contenido de lo que escribís), uso del portapapeles (solo la cantidad de caracteres copiados o pegados, nunca el texto), cambios de tamaño de ventana y de pantalla completa, y el tiempo dedicado a cada pregunta. No se registra el contenido de tus respuestas, ni se activa la cámara, el micrófono, ni ningún otro dispositivo.
+Qué se registra: cambios de foco de ventana y de pestaña, actividad de mouse y teclado (sin el contenido de lo que escribís), uso del portapapeles (solo la cantidad de caracteres copiados o pegados, nunca el texto), cambios de tamaño de ventana y de pantalla completa, el tiempo dedicado a cada pregunta, los cortes y las recuperaciones de la conexión, y datos técnicos de tu equipo: la familia y la versión mayor del navegador, y si el dispositivo es táctil. No se registra el contenido de tus respuestas, ni se activa la cámara, el micrófono, ni ningún otro dispositivo.
 
 Quién accede: únicamente el/la docente responsable de este curso, a través de un panel de supervisión.
 
@@ -33,6 +33,15 @@ Marco legal: este tratamiento de datos se realiza en el marco de la Ley N.° 25.
 
 Para comenzar este examen es necesario aceptar este aviso.';
 $string['consentaccept'] = 'Acepto';
+$string['consentdecline'] = 'No acepto';
 $string['indicatortext'] = 'Este examen está siendo monitoreado';
 $string['taskretryexamevent'] = 'Reintentar un aviso de examen a SAMCE';
 $string['taskretryexameventfailed'] = 'No se pudo reintentar el aviso de examen a SAMCE';
+$string['privacy:metadata:samce_backend'] = 'El sistema de monitoreo SAMCE (samce-backend), al que el complemento envía, servidor a servidor, el inicio y la entrega de cada intento de examen y las señales técnicas de interacción del alumno durante el intento.';
+$string['privacy:metadata:samce_backend:attemptid'] = 'El identificador del intento de examen.';
+$string['privacy:metadata:samce_backend:userid'] = 'El identificador del alumno en Moodle (se guarda cifrado).';
+$string['privacy:metadata:samce_backend:fullname'] = 'El nombre completo del alumno (se guarda cifrado).';
+$string['privacy:metadata:samce_backend:courseid'] = 'El identificador del curso.';
+$string['privacy:metadata:samce_backend:quizid'] = 'El identificador y el nombre del cuestionario, su límite de tiempo y su cantidad de preguntas.';
+$string['privacy:metadata:samce_backend:timestamps'] = 'La hora de inicio y de entrega o abandono del intento.';
+$string['privacy:metadata:samce_backend:interaction'] = 'Señales técnicas de la interacción con el navegador durante el intento: cambios de foco y de visibilidad, cadencia de tecleo y movimiento del mouse sin el contenido, cantidad de caracteres copiados o pegados (nunca el texto), tamaño de ventana y pantalla completa, tiempo por pregunta, estado de la conexión, familia y versión mayor del navegador, si el dispositivo es táctil, y la aceptación del aviso de monitoreo.';

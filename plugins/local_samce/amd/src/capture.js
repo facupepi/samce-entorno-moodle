@@ -31,6 +31,15 @@ define('local_samce/capture', [
 
     var DEFAULT_FLUSH_MS = 5000;
     var BATCH_SIZE = 100;
+    /**
+     * Tope de bytes del data de un lote. El mismo límite de 128 KiB lo aplican
+     * el plugin (event_batch::MAX_BATCH_DATA_BYTES) y el backend
+     * (maxBatchDataBytes); acá se corta más abajo, con margen, para que un lote
+     * nunca se rechace por tamaño y se pierda entero.
+     */
+    var BATCH_MAX_BYTES = 96 * 1024;
+    /** Ventana al azar antes del vaciado por reconexión, para que 30 alumnos no le peguen juntos al backend. */
+    var ONLINE_JITTER_MS = 3000;
     /** Al cerrar la página el navegador limita el tamaño de lo que puede terminar de enviar. */
     var UNLOAD_BATCH_SIZE = 40;
     var BACKOFF_BASE_MS = 2000;
@@ -39,6 +48,16 @@ define('local_samce/capture', [
     var MAX_BATCHES_PER_FLUSH = 5;
     /** Cuántos envíos fallidos seguidos hacen falta para dar por perdida la conexión. */
     var LOST_AFTER_FAILURES = 2;
+
+    /** Un id corto al azar, con el alfabeto que acepta el backend. */
+    var newContextId = function(random) {
+        var alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        var id = '';
+        for (var i = 0; i < 12; i++) {
+            id += alphabet.charAt(Math.floor(random() * alphabet.length));
+        }
+        return id;
+    };
 
     /**
      * Arranca la captura. Recibe todo lo que toca del navegador, para poder
@@ -70,6 +89,15 @@ define('local_samce/capture', [
             key: 'local_samce:capture:' + attemptId,
             now: now
         });
+
+        var random = options.random || Math.random;
+        // Identifica este contexto de captura (esta carga de página). Vive en una
+        // variable del módulo y NO en sessionStorage, porque duplicar una pestaña
+        // copia el almacenamiento. Dos pestañas del mismo intento, o el mismo
+        // intento reabierto tras cerrar el navegador, tienen ids distintos: el
+        // análisis puede separar los flujos en vez de leer el cambio entre
+        // pestañas como "se fue del examen" (punto 10 de la revisión externa).
+        var contextId = newContextId(random);
 
         var stopped = false;
         var sending = false;
@@ -135,6 +163,9 @@ define('local_samce/capture', [
 
         if (!queue.profileSent()) {
             env.emit('client_profile', SigWindow.profileOf(win));
+            // resize solo sale desde el listener: un alumno que nunca toca la
+            // ventana no dejaba ni un ancho y alto en toda la sesión.
+            env.emit('resize', {w: win.innerWidth, h: win.innerHeight});
             queue.markProfileSent();
         }
 
@@ -190,16 +221,33 @@ define('local_samce/capture', [
             // frenando: lo que una señal encole acá queda guardado igual, y
             // sale en el próximo vaciado que sí llegue a mandar (el de la
             // página siguiente, por ejemplo).
+            var sizeBeforeSignals = queue.size();
             signals.forEach(function(signal) {
                 safe(signal.flush)({final: !!flushOptions.keepalive, unloading: !!flushOptions.unloading});
             });
+            var signalsAdded = queue.size() > sizeBeforeSignals;
+
+            // Lo descartado desde el último vaciado sale como un evento más, para
+            // que un hueco en los datos no se lea como inactividad.
+            var droppedNow = queue.takeDropped();
+            if (droppedNow) {
+                env.emit('events_dropped', droppedNow);
+                signalsAdded = true;
+            }
 
             // Cambiar de pregunta en un cuestionario paginado dispara
             // visibilitychange a oculto y pagehide casi juntos, y los dos
             // llegan hasta acá con keepalive. Sin este freno, cada cambio de
             // pregunta mandaba el mismo lote dos veces por la red —
             // inofensivo desde dropUpTo, pero tráfico de más en cada examen.
-            var yaVacioPorEsteOcultamiento = flushOptions.keepalive && keepaliveFlushed;
+            //
+            // Excepción: si la página se está yendo de verdad y las señales
+            // acaban de sumar algo (el cierre del tramo de visibilidad, por
+            // ejemplo), ese lote no lo mandó el vaciado anterior y en la
+            // última navegación del intento no hay página siguiente que lo
+            // vacíe. Ahí no se frena.
+            var yaVacioPorEsteOcultamiento = flushOptions.keepalive && keepaliveFlushed &&
+                !(flushOptions.unloading && signalsAdded);
             if (flushOptions.keepalive) {
                 keepaliveFlushed = true;
             }
@@ -219,10 +267,10 @@ define('local_samce/capture', [
             var batchesLeft = flushOptions.keepalive ? 1 : MAX_BATCHES_PER_FLUSH;
 
             var sendNext = function() {
-                var batch = queue.peek(flushOptions.keepalive ? UNLOAD_BATCH_SIZE : BATCH_SIZE);
+                var batch = queue.peek(flushOptions.keepalive ? UNLOAD_BATCH_SIZE : BATCH_SIZE, BATCH_MAX_BYTES);
                 // Cualquier falla del envío, incluso una que lance de forma síncrona, es un reintento.
                 return Promise.resolve().then(function() {
-                    return options.transport.send(attemptId, batch, {keepalive: !!flushOptions.keepalive});
+                    return options.transport.send(attemptId, batch, {keepalive: !!flushOptions.keepalive, contextId: contextId});
                 }).catch(function() {
                     return 'retry';
                 }).then(function(status) {
@@ -241,7 +289,10 @@ define('local_samce/capture', [
                             queue.setLost(true);
                             env.emit('connection', {online: false, source: 'send'});
                         }
-                        retryAt = now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
+                        // +-25 % al azar: sin él, todos los alumnos que fallaron a la
+                        // vez reintentaban a la vez, siempre con el mismo intervalo.
+                        var backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
+                        retryAt = now() + Math.round(backoff * (0.75 + random() * 0.5));
                         return;
                     }
 
@@ -250,6 +301,14 @@ define('local_samce/capture', [
                     // aunque se superponga con otro vaciado (ver el comentario de dropUpTo).
                     if (batch.length > 0) {
                         queue.dropUpTo(batch[batch.length - 1].seq);
+                        // Un lote rechazado se pierde: se anota. Salvo que fuera solo el
+                        // aviso de descartes: si el backend lo rechazara, contarlo
+                        // generaría otro aviso, y otro, sin fin.
+                        if (status === 'rejected' && batch.some(function(e) {
+                            return e.type !== 'events_dropped';
+                        })) {
+                            queue.noteDropped('rejected', batch.length);
+                        }
                     }
                     if (queue.isLost()) {
                         queue.setLost(false);
@@ -287,7 +346,11 @@ define('local_samce/capture', [
             }
         });
         var onOnline = safe(function() {
-            flush({force: true});
+            // Es el único camino realmente sincronizado (force saltea retryAt): al
+            // volver la red de todos a la vez, cada uno espera un rato distinto.
+            win.setTimeout(safe(function() {
+                flush({force: true});
+            }), Math.floor(random() * ONLINE_JITTER_MS));
         });
 
         win.addEventListener('pagehide', onPageHide);

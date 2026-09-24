@@ -12,7 +12,9 @@ defined('MOODLE_INTERNAL') || die();
  * no se da por bueno: el mismo tope de tamaño y la misma lista de tipos que
  * aplica el backend se aplican acá primero, para no firmar ni reenviar un
  * lote que el backend iba a rechazar. Los límites y los tipos tienen que
- * coincidir con los de samce-backend (handlers/interaction_events.go).
+ * coincidir con los de samce-backend (handlers/interaction_events.go);
+ * tests/event_types.txt es la lista de referencia de los tipos, la misma en
+ * los dos repos. Al agregar un tipo: primero el backend, después el plugin.
  *
  * No depende de ninguna API de Moodle a propósito, para poder testearla de
  * forma aislada sin bootstrapear un Moodle completo (igual que token_signer).
@@ -26,6 +28,18 @@ class event_batch {
 
     /** Máximo de bytes del data de un solo evento, ya serializado. */
     const MAX_DATA_BYTES = 2048;
+
+    /**
+     * Máximo de bytes de la SUMA del data de un lote. Antes solo se validaba
+     * cada evento por separado, y el máximo que se podía firmar (100 x 2048
+     * bytes, más el base64 del token) superaba el tope del body del backend:
+     * respondía 413, send_events.php lo trataba como rechazo y se perdían los
+     * cien eventos sin rastro (punto 22 de la revisión externa del
+     * 23/09/2026). El mismo valor está en samce-backend
+     * (interaction_events.go, maxBatchDataBytes), y el navegador corta los
+     * lotes por debajo (capture.js, BATCH_MAX_BYTES).
+     */
+    const MAX_BATCH_DATA_BYTES = 131072;
 
     /**
      * Rango válido de `t`, el mismo que aplica el backend
@@ -43,6 +57,7 @@ class event_batch {
     const ALLOWED_TYPES = [
         'client_profile',
         'consent_accepted',
+        'events_dropped',
         'focus_lost',
         'focus_gained',
         'visibility_hidden',
@@ -78,6 +93,7 @@ class event_batch {
         }
 
         $clean = [];
+        $totaldata = 0;
         foreach ($decoded as $event) {
             if (!is_object($event)) {
                 return null;
@@ -100,6 +116,10 @@ class event_batch {
             }
             $encoded = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             if ($encoded === false || strlen($encoded) > self::MAX_DATA_BYTES) {
+                return null;
+            }
+            $totaldata += strlen($encoded);
+            if ($totaldata > self::MAX_BATCH_DATA_BYTES) {
                 return null;
             }
 

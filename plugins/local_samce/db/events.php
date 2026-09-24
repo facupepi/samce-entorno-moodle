@@ -16,4 +16,8 @@ $observers = [
         'eventname' => '\mod_quiz\event\attempt_submitted',
         'callback'  => '\local_samce\observer::quiz_attempt_submitted',
     ],
+    [
+        'eventname' => '\mod_quiz\event\attempt_abandoned',
+        'callback'  => '\local_samce\observer::quiz_attempt_abandoned',
+    ],
 ];

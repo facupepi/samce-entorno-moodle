@@ -43,25 +43,30 @@ class send_events extends external_api {
         return new external_function_parameters([
             'attemptid' => new external_value(PARAM_INT, 'Id del intento de examen'),
             'events' => new external_value(PARAM_RAW, 'Lote de eventos, en JSON'),
+            // Identifica el contexto de captura del navegador (una carga de
+            // página). Opcional: un JS viejo en caché no lo manda.
+            'contextid' => new external_value(PARAM_ALPHANUMEXT, 'Id del contexto de captura', VALUE_DEFAULT, ''),
         ]);
     }
 
     /**
      * @param int $attemptid Intento al que pertenecen los eventos.
      * @param string $events Lista de eventos en JSON.
+     * @param string $contextid Id del contexto de captura (puede venir vacío).
      * @return array Con un solo campo, status: 'ok' (guardado), 'disabled'
      *               (la captura está apagada o mal configurada: el cliente
      *               debe dejar de capturar), 'rejected' (el lote no se puede
      *               aceptar: el cliente lo descarta) o 'retry' (falló el
      *               envío: el cliente lo conserva y reintenta).
      */
-    public static function execute(int $attemptid, string $events): array {
+    public static function execute(int $attemptid, string $events, string $contextid = ''): array {
         global $CFG, $DB, $USER;
 
         try {
             $params = self::validate_parameters(self::execute_parameters(), [
                 'attemptid' => $attemptid,
                 'events' => $events,
+                'contextid' => $contextid,
             ]);
 
             if (!get_config('local_samce', 'capture_enabled')) {
@@ -110,13 +115,19 @@ class send_events extends external_api {
             }
 
             $now = time();
-            $token = token_signer::sign([
+            $claims = [
                 'event_type'        => 'interaction_events',
                 'moodle_attempt_id' => (int) $attempt->id,
                 'events'            => $clean,
                 'iat'               => $now,
                 'exp'               => $now + 60,
-            ], $secret);
+            ];
+            // El mismo tope que aplica el backend (36 caracteres).
+            $contextid = substr((string) $params['contextid'], 0, 36);
+            if ($contextid !== '') {
+                $claims['context_id'] = $contextid;
+            }
+            $token = token_signer::sign($claims, $secret);
 
             // Ya no hace falta la sesión de Moodle: liberarla antes de
             // esperar al backend evita que una demora de SAMCE trabe la

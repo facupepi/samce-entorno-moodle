@@ -117,6 +117,43 @@ class event_batch_test extends \PHPUnit\Framework\TestCase {
         $this->assertNull(event_batch::parse($this->batch([$this->event(['data' => $big])])));
     }
 
+    // Punto 22 de la revisión externa: el tope de la suma tiene que ser el mismo
+    // que el del backend, para que un lote que el plugin firma nunca se rechace
+    // por tamaño del otro lado.
+    public function test_a_batch_whose_data_adds_up_past_the_limit_is_rejected(): void {
+        $events = [];
+        for ($i = 1; $i <= event_batch::MAX_EVENTS; $i++) {
+            $events[] = $this->event(['seq' => $i, 'type' => 'clipboard', 'data' => ['x' => str_repeat('a', 1400)]]);
+        }
+
+        $this->assertNull(event_batch::parse($this->batch($events)));
+    }
+
+    public function test_a_batch_just_under_the_total_limit_is_accepted(): void {
+        $per = intdiv(event_batch::MAX_BATCH_DATA_BYTES, event_batch::MAX_EVENTS) - strlen('{"x":""}') - 4;
+        $events = [];
+        for ($i = 1; $i <= event_batch::MAX_EVENTS; $i++) {
+            $events[] = $this->event(['seq' => $i, 'type' => 'clipboard', 'data' => ['x' => str_repeat('a', $per)]]);
+        }
+
+        $this->assertCount(event_batch::MAX_EVENTS, event_batch::parse($this->batch($events)));
+    }
+
+    /**
+     * La lista de tipos tiene que ser la misma que la del backend. tests/event_types.txt
+     * es el mismo archivo en los dos repos (samce-backend: handlers/testdata/event_types.txt):
+     * este test compara el código con la copia de este repo.
+     */
+    public function test_allowed_types_match_the_shared_reference_list(): void {
+        $lines = file(__DIR__ . '/event_types.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $fromfile = array_map('trim', $lines);
+
+        $missing = array_diff(event_batch::ALLOWED_TYPES, $fromfile);
+        $extra = array_diff($fromfile, event_batch::ALLOWED_TYPES);
+        $this->assertSame([], array_values($missing), 'en el código pero no en tests/event_types.txt');
+        $this->assertSame([], array_values($extra), 'en tests/event_types.txt pero no en el código');
+    }
+
     public function test_a_single_bad_event_rejects_the_whole_batch(): void {
         $this->assertNull(event_batch::parse($this->batch([$this->event(), $this->event(['type' => 'keylogger', 'seq' => 2])])));
     }
