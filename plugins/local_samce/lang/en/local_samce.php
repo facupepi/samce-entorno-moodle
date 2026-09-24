@@ -45,3 +45,10 @@ $string['privacy:metadata:samce_backend:courseid'] = 'The course identifier.';
 $string['privacy:metadata:samce_backend:quizid'] = 'The quiz identifier and name, its time limit and its number of questions.';
 $string['privacy:metadata:samce_backend:timestamps'] = 'The time the attempt started and was submitted or abandoned.';
 $string['privacy:metadata:samce_backend:interaction'] = 'Technical signals of the interaction with the browser during the attempt: focus and visibility changes, typing cadence and mouse movement without content, number of characters copied or pasted (never the text), window size and fullscreen, time per question, connection state, browser family and major version, whether the device is touch-capable, and the acceptance of the monitoring notice.';
+$string['restrictbrowser'] = 'Require Google Chrome on a computer';
+$string['restrictbrowser_desc'] = 'When enabled, exams with event capture can only be taken with Google Chrome on a computer. With another browser, or from a phone or tablet, the student sees a notice and cannot take the exam. Note: this is decided from the User-Agent, which can be spoofed, and Brave and other Chromium-based browsers identify themselves as Chrome.';
+$string['browserblockedtitle'] = 'Unsupported browser';
+$string['browserblockedbody'] = 'This exam can only be taken with Google Chrome on a computer (not on a phone or tablet, and not with another browser).
+
+Open this exam in Google Chrome from a computer to take it.';
+$string['browserblockedback'] = 'Back';

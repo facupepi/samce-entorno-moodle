@@ -45,3 +45,10 @@ $string['privacy:metadata:samce_backend:courseid'] = 'El identificador del curso
 $string['privacy:metadata:samce_backend:quizid'] = 'El identificador y el nombre del cuestionario, su límite de tiempo y su cantidad de preguntas.';
 $string['privacy:metadata:samce_backend:timestamps'] = 'La hora de inicio y de entrega o abandono del intento.';
 $string['privacy:metadata:samce_backend:interaction'] = 'Señales técnicas de la interacción con el navegador durante el intento: cambios de foco y de visibilidad, cadencia de tecleo y movimiento del mouse sin el contenido, cantidad de caracteres copiados o pegados (nunca el texto), tamaño de ventana y pantalla completa, tiempo por pregunta, estado de la conexión, familia y versión mayor del navegador, si el dispositivo es táctil, y la aceptación del aviso de monitoreo.';
+$string['restrictbrowser'] = 'Exigir Google Chrome en una computadora';
+$string['restrictbrowser_desc'] = 'Si está activada, los exámenes con captura de eventos solo se pueden rendir con Google Chrome en una computadora. Con otro navegador, o desde un teléfono o una tablet, el alumno ve un aviso y no puede rendir. Ojo: se decide con el User-Agent, que se puede falsear, y Brave y otros navegadores basados en Chromium se identifican como Chrome.';
+$string['browserblockedtitle'] = 'Navegador no admitido';
+$string['browserblockedbody'] = 'Este examen se rinde únicamente con Google Chrome, en una computadora (no en un teléfono ni en una tablet, y no con otro navegador).
+
+Abrí este examen en Google Chrome desde una computadora para poder rendirlo.';
+$string['browserblockedback'] = 'Volver';
