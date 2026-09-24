@@ -30,6 +30,10 @@ define('local_samce/capture', [
     'use strict';
 
     var DEFAULT_FLUSH_MS = 5000;
+    /** Ver queue.push: no se descartan al desbordarse la cola. */
+    var KEEP = {keep: true};
+    /** Espera antes de escribir la cola en el almacenamiento: junta las escrituras. */
+    var SAVE_DELAY_MS = 300;
     var BATCH_SIZE = 100;
     /**
      * Tope de bytes del data de un lote. El mismo límite de 128 KiB lo aplican
@@ -48,6 +52,28 @@ define('local_samce/capture', [
     var MAX_BATCHES_PER_FLUSH = 5;
     /** Cuántos envíos fallidos seguidos hacen falta para dar por perdida la conexión. */
     var LOST_AFTER_FAILURES = 2;
+
+    /** El id de la pestaña para este intento, guardado o nuevo. */
+    var contextIdFor = function(storage, attemptId, random) {
+        var key = 'local_samce:context:' + attemptId;
+        try {
+            var saved = storage ? storage.getItem(key) : null;
+            if (saved && /^[a-z0-9]{6,36}$/.test(saved)) {
+                return saved;
+            }
+        } catch (e) {
+            // Sin almacenamiento: un id para esta carga.
+        }
+        var id = newContextId(random);
+        try {
+            if (storage) {
+                storage.setItem(key, id);
+            }
+        } catch (e) {
+            // Sin almacenamiento: sigue funcionando, con un id por carga.
+        }
+        return id;
+    };
 
     /** Un id corto al azar, con el alfabeto que acepta el backend. */
     var newContextId = function(random) {
@@ -87,22 +113,33 @@ define('local_samce/capture', [
         var queue = Queue.create({
             storage: options.storage,
             key: 'local_samce:capture:' + attemptId,
-            now: now
+            now: now,
+            saveDelayMs: options.saveDelayMs === undefined ? SAVE_DELAY_MS : options.saveDelayMs,
+            setTimeout: function(fn, ms) {
+                return win.setTimeout(fn, ms);
+            }
         });
 
         var random = options.random || Math.random;
-        // Identifica este contexto de captura (esta carga de página). Vive en una
-        // variable del módulo y NO en sessionStorage, porque duplicar una pestaña
-        // copia el almacenamiento. Dos pestañas del mismo intento, o el mismo
-        // intento reabierto tras cerrar el navegador, tienen ids distintos: el
-        // análisis puede separar los flujos en vez de leer el cambio entre
-        // pestañas como "se fue del examen" (punto 10 de la revisión externa).
-        var contextId = newContextId(random);
+        // Identifica la pestaña donde corre la captura, no cada carga de página. Un
+        // cuestionario paginado recarga la página en cada pregunta: con un id nuevo en
+        // cada carga, un alumno con UNA pestaña y 20 preguntas producía 20 contextos, y
+        // los eventos que quedaban en la cola de la pregunta anterior salían sellados con
+        // el de la siguiente (revisión del 24/09/2026, punto 3.4). Se guarda en
+        // sessionStorage, que es por pestaña y sobrevive a la recarga: dos pestañas del
+        // mismo intento tienen ids distintos. Limitación conocida: duplicar una pestaña
+        // copia el almacenamiento, y las dos comparten el id.
+        var contextId = contextIdFor(options.storage, attemptId, random);
 
         var stopped = false;
         var sending = false;
-        var failures = 0;
-        var retryAt = 0;
+        // La espera del reintento se guarda con la cola: en un examen paginado cada
+        // pregunta recarga la página, y en una variable del módulo nunca crecía.
+        // Tamaño de lote reducido mientras se aísla un evento que el servidor rechaza.
+        var splitLimit = null;
+        var savedRetry = queue.getRetry();
+        var failures = savedRetry.failures;
+        var retryAt = savedRetry.at;
         // Cambiar de pregunta en un cuestionario paginado dispara
         // visibilitychange a oculto y pagehide casi juntos, y los dos
         // vacían con keepalive (a propósito: no esperan a que termine
@@ -130,9 +167,9 @@ define('local_samce/capture', [
             doc: doc,
             now: now,
             safe: safe,
-            emit: function(type, data) {
+            emit: function(type, data, pushOptions) {
                 if (!stopped) {
-                    queue.push(type, data);
+                    queue.push(type, data, pushOptions);
                 }
             }
         };
@@ -162,10 +199,12 @@ define('local_samce/capture', [
         });
 
         if (!queue.profileSent()) {
-            env.emit('client_profile', SigWindow.profileOf(win));
+            // Los tres eventos que pasan una sola vez por intento (perfil, tamaño
+            // inicial y constancia del aviso) no se descartan al desbordarse la cola.
+            env.emit('client_profile', SigWindow.profileOf(win), KEEP);
             // resize solo sale desde el listener: un alumno que nunca toca la
             // ventana no dejaba ni un ancho y alto en toda la sesión.
-            env.emit('resize', {w: win.innerWidth, h: win.innerHeight});
+            env.emit('resize', {w: win.innerWidth, h: win.innerHeight, initial: true}, KEEP);
             queue.markProfileSent();
         }
 
@@ -175,7 +214,7 @@ define('local_samce/capture', [
         // recibir el click de "Acepto" — en las páginas siguientes del mismo
         // intento no se repite (ver local_samce/consent).
         if (options.consentAcceptedAt) {
-            env.emit('consent_accepted', {});
+            env.emit('consent_accepted', {}, KEEP);
         }
 
         // HU12 (RF06): indicador visible y persistente mientras la captura
@@ -194,6 +233,7 @@ define('local_samce/capture', [
             });
             frames.stop();
             indicator.remove();
+            queue.persist();
             win.removeEventListener('pagehide', onPageHide);
             win.removeEventListener('online', onOnline);
             doc.removeEventListener('visibilitychange', onVisibility);
@@ -214,6 +254,8 @@ define('local_samce/capture', [
             if (stopped) {
                 return Promise.resolve();
             }
+            // Lo pendiente de escribir se escribe ya: la página puede irse en cualquier momento.
+            queue.persist();
 
             // Con la página cerrándose u ocultándose, los detectores informan ya
             // lo que tienen acumulado (por ejemplo, el tiempo de cada pregunta).
@@ -267,7 +309,7 @@ define('local_samce/capture', [
             var batchesLeft = flushOptions.keepalive ? 1 : MAX_BATCHES_PER_FLUSH;
 
             var sendNext = function() {
-                var batch = queue.peek(flushOptions.keepalive ? UNLOAD_BATCH_SIZE : BATCH_SIZE, BATCH_MAX_BYTES);
+                var batch = queue.peek(flushOptions.keepalive ? UNLOAD_BATCH_SIZE : (splitLimit || BATCH_SIZE), BATCH_MAX_BYTES);
                 // Cualquier falla del envío, incluso una que lance de forma síncrona, es un reintento.
                 return Promise.resolve().then(function() {
                     return options.transport.send(attemptId, batch, {keepalive: !!flushOptions.keepalive, contextId: contextId});
@@ -293,7 +335,23 @@ define('local_samce/capture', [
                         // vez reintentaban a la vez, siempre con el mismo intervalo.
                         var backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
                         retryAt = now() + Math.round(backoff * (0.75 + random() * 0.5));
+                        queue.setRetry(failures, retryAt);
                         return;
+                    }
+
+                    // Un lote rechazado se parte en mitades para aislar el evento que falla,
+                    // en vez de perder los hasta 99 buenos que iban con él (revisión del
+                    // 24/09/2026, punto 4.2). Solo un evento suelto rechazado se descarta.
+                    if (status === 'rejected' && batch.length > 1 && !flushOptions.keepalive) {
+                        splitLimit = Math.max(1, Math.floor(batch.length / 2));
+                        batchesLeft -= 1;
+                        if (batchesLeft > 0) {
+                            return sendNext();
+                        }
+                        return;
+                    }
+                    if (status === 'rejected') {
+                        splitLimit = null;
                     }
 
                     // 'ok', o 'rejected' (que no mejora reintentando): el lote sale de la
@@ -316,6 +374,10 @@ define('local_samce/capture', [
                     }
                     failures = 0;
                     retryAt = 0;
+                    queue.setRetry(0, 0);
+                    if (queue.size() === 0) {
+                        splitLimit = null;
+                    }
                     batchesLeft -= 1;
                     if (batchesLeft > 0 && queue.size() > 0) {
                         return sendNext();

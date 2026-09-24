@@ -19,4 +19,11 @@ $functions = [
         'ajax'          => true,
         'loginrequired' => true,
     ],
+    'local_samce_accept_notice' => [
+        'classname'     => 'local_samce\external\accept_notice',
+        'description'   => 'Registra, del lado del servidor, que el alumno vio el aviso de monitoreo de un intento en curso.',
+        'type'          => 'write',
+        'ajax'          => true,
+        'loginrequired' => true,
+    ],
 ];

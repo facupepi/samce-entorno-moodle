@@ -36,8 +36,47 @@
  * @module     local_samce/consent
  * @copyright  SAMCE
  */
-define('local_samce/consent', ['local_samce/capture', 'local_samce/consent_notice'], function(Capture, Notice) {
+define('local_samce/consent', ['local_samce/capture', 'local_samce/consent_notice', 'local_samce/transport'],
+function(Capture, Notice, Transport) {
     'use strict';
+
+    var ACCEPT_ATTEMPTS = 3;
+    var ACCEPT_RETRY_MS = 1500;
+
+    /**
+     * Deja constancia en el servidor de que el alumno vio el aviso de este
+     * intento y, solo si quedó registrada, arranca la captura. Sin esa
+     * constancia Moodle no acepta ningún evento del intento (send_events.php),
+     * así que arrancar igual sería capturar para nada. Si el registro falla, no
+     * se captura en esta página (falla cerrado) y se vuelve a intentar en la
+     * siguiente.
+     *
+     * @param {Object} config
+     * @param {Object} extra campos que se suman a la config de la captura.
+     */
+    var startCapture = function(config, extra) {
+        var moodleConfig = window.M && window.M.cfg;
+        if (!moodleConfig) {
+            return;
+        }
+        var transport = Transport.create({wwwroot: moodleConfig.wwwroot, sesskey: moodleConfig.sesskey});
+
+        var attempt = function(left) {
+            transport.accept(config.attemptid).then(function(status) {
+                if (status === 'ok') {
+                    Capture.init(Object.assign({}, config, extra));
+                } else if (status === 'retry' && left > 1) {
+                    window.setTimeout(function() {
+                        attempt(left - 1);
+                    }, ACCEPT_RETRY_MS);
+                }
+                // 'disabled' o 'rejected': no hay monitoreo para este intento.
+            }).catch(function() {
+                // Nada que mostrarle al alumno: sin constancia no hay captura.
+            });
+        };
+        attempt(ACCEPT_ATTEMPTS);
+    };
 
     /**
      * Devuelve al alumno a la página del cuestionario (o a la anterior si no
@@ -91,7 +130,9 @@ define('local_samce/consent', ['local_samce/capture', 'local_samce/consent_notic
                 }
 
                 if (Notice.alreadyAccepted(storage, config.attemptid)) {
-                    Capture.init(config);
+                    // Puede ser un intento que aceptó antes de que existiera la
+                    // constancia del servidor: se registra ahora.
+                    startCapture(config, {});
                     return;
                 }
 
@@ -100,7 +141,7 @@ define('local_samce/consent', ['local_samce/capture', 'local_samce/consent_notic
                 // acá, con el intento ya creado, se registra.
                 if (Notice.takePending(storage, config.cmid, Date.now())) {
                     Notice.markAccepted(storage, config.attemptid);
-                    Capture.init(Object.assign({}, config, {consentacceptedat: true}));
+                    startCapture(config, {consentacceptedat: true});
                     return;
                 }
 
@@ -117,7 +158,7 @@ define('local_samce/consent', ['local_samce/capture', 'local_samce/consent_notic
                     decline: config.noticedecline
                 }, function() {
                     Notice.markAccepted(storage, config.attemptid);
-                    Capture.init(Object.assign({}, config, {consentacceptedat: true}));
+                    startCapture(config, {consentacceptedat: true});
                 }, function() {
                     leave(config.declineurl);
                 });

@@ -65,6 +65,9 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
                     return node && typeof node.closest === 'function' ? node.closest(START_FORM) : null;
                 };
 
+                // Muestra el aviso. Puede lanzar (un texto de idioma faltante, un tema
+                // del campus que deja el DOM en un estado raro): quien la llama tiene
+                // que estar preparado para dejar seguir el envío.
                 var ask = function(retry) {
                     if (showing) {
                         return;
@@ -77,7 +80,13 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
                         decline: config.noticedecline
                     }, function() {
                         showing = false;
-                        Notice.setPending(storage, config.cmid, now());
+                        // Si guardar la aceptación pendiente falla, igual sigue: la
+                        // página del intento vuelve a pedirla.
+                        try {
+                            Notice.setPending(storage, config.cmid, now());
+                        } catch (e) {
+                            // Nada más que intentar.
+                        }
                         allowed = true;
                         retry();
                     }, function() {
@@ -87,40 +96,61 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
                     });
                 };
 
+                // El envío solo se cancela DESPUÉS de haber mostrado el aviso. Si mostrarlo
+                // falla, no se interpone: el alumno puede comenzar igual, y la página del
+                // intento vuelve a pedir el aviso (el respaldo de local_samce/consent).
+                // Antes se cancelaba primero, y una falla dejaba el botón sin hacer nada y
+                // sin ningún mensaje (revisión del 24/09/2026, punto 5.1).
+                var intercept = function(event, retry) {
+                    try {
+                        ask(retry);
+                    } catch (e) {
+                        showing = false;
+                        allowed = true;
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                };
+
                 // Se intercepta el click en la fase de captura, antes que el JS de
                 // Moodle (que con contraseña o chequeos previos abre su propio
                 // cuadro), y también el envío del formulario, por si Moodle lo
                 // dispara por otro camino.
                 doc.addEventListener('click', function(event) {
-                    if (allowed) {
-                        return;
+                    try {
+                        if (allowed) {
+                            return;
+                        }
+                        var button = event.target && typeof event.target.closest === 'function' ?
+                            event.target.closest('button, input[type="submit"]') : null;
+                        if (!button || !startForm(button)) {
+                            return;
+                        }
+                        intercept(event, function() {
+                            button.click();
+                        });
+                    } catch (e) {
+                        allowed = true;
                     }
-                    var button = event.target && typeof event.target.closest === 'function' ?
-                        event.target.closest('button, input[type="submit"]') : null;
-                    if (!button || !startForm(button)) {
-                        return;
-                    }
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    ask(function() {
-                        button.click();
-                    });
                 }, true);
 
                 doc.addEventListener('submit', function(event) {
-                    var form = startForm(event.target);
-                    if (allowed || !form) {
-                        return;
-                    }
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    ask(function() {
-                        if (typeof form.requestSubmit === 'function') {
-                            form.requestSubmit();
-                        } else {
-                            form.submit();
+                    try {
+                        var form = startForm(event.target);
+                        if (allowed || !form) {
+                            return;
                         }
-                    });
+                        intercept(event, function() {
+                            if (typeof form.requestSubmit === 'function') {
+                                form.requestSubmit();
+                            } else {
+                                form.submit();
+                            }
+                        });
+                    } catch (e) {
+                        allowed = true;
+                    }
                 }, true);
             } catch (e) {
                 // Sin la compuerta el alumno puede comenzar igual, y el respaldo de la página

@@ -57,13 +57,17 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
         // ella se perdía el hueco entre la última tecla de una y la primera de
         // la siguiente, que es justo la pausa larga que interesa medir.
         var lastKeyAt = new Map();
+        // Desde cuándo cuenta window_ms: el vaciado anterior, igual que en
+        // sig_pointer. Antes acá era desde que arrancó la ventana de cada pregunta
+        // y allá desde el vaciado, dos definiciones para el mismo nombre
+        // (revisión del 24/09/2026, punto 3.3).
+        var lastFlushAt = env.now();
 
         var windowFor = function(context) {
             var key = context.slot === undefined ? 'none' : String(context.slot);
             if (!windows.has(key)) {
                 windows.set(key, {
                     key: key,
-                    startedAt: env.now(),
                     gapBefore: null,
                     maxPause: 0,
                     context: context,
@@ -145,8 +149,17 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                     var data = {action: action};
                     if (action === 'paste') {
                         // Solo se mide; el texto pegado no se guarda ni se manda.
-                        var pasted = event.clipboardData ? event.clipboardData.getData('text') : '';
-                        data.length = typeof pasted === 'string' ? pasted.length : 0;
+                        var clipboardData = event.clipboardData;
+                        var pasted = clipboardData ? clipboardData.getData('text') : '';
+                        if (typeof pasted === 'string' && pasted.length > 0) {
+                            data.length = pasted.length;
+                        } else if (clipboardData && clipboardData.files && clipboardData.files.length > 0) {
+                            // Pegó un archivo o una imagen: no es texto y no tiene largo. Antes
+                            // salía "0 caracteres" (revisión del 24/09/2026, punto 3.5).
+                            data.non_text = true;
+                        } else {
+                            data.length = 0;
+                        }
                     } else {
                         var length = selectedLength(event.target);
                         if (length !== null) {
@@ -187,16 +200,21 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                         inserts: acc.inserts,
                         deletes: acc.deletes,
                         by_origin: acc.byOrigin,
-                        interval_ms: intervals.length ?
-                            {min: intervals[0], median: median(intervals), max: intervals[intervals.length - 1]} :
-                            {min: 0, median: 0, max: 0},
                         pauses: acc.pauses,
                         // Largo real de la ventana: el normal es de 5 s, pero los
                         // vaciados por salir de la página o volver la conexión la acortan.
-                        window_ms: Math.round(env.now() - acc.startedAt),
+                        window_ms: Math.round(env.now() - lastFlushAt),
                         // La pausa más larga dentro de la ventana (pauses solo la cuenta).
                         max_pause_ms: acc.maxPause
                     };
+                    // Sin intervalos que medir (una sola tecla, o todos los huecos fueron
+                    // pausas de 2 s o más) no se manda la clave. Antes salía {0,0,0}: el
+                    // alumno que piensa cada palabra quedaba igual que un pegado
+                    // instantáneo, que es lo contrario (revisión del 24/09/2026, 1.5). Es el
+                    // mismo criterio que el de `length` en copiar y cortar.
+                    if (intervals.length) {
+                        data.interval_ms = {min: intervals[0], median: median(intervals), max: intervals[intervals.length - 1]};
+                    }
                     // Hueco desde la última entrada de la ventana anterior de esta
                     // misma pregunta; sin clave si es la primera vez que se teclea.
                     if (acc.gapBefore !== null) {
@@ -205,6 +223,7 @@ define('local_samce/sig_input', ['local_samce/question_context'], function(Quest
                     env.emit('key_activity', QuestionContext.withContext(data, acc.context));
                 });
                 windows.clear();
+                lastFlushAt = env.now();
             },
 
             stop: function() {}

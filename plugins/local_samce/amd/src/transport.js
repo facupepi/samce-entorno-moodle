@@ -18,7 +18,8 @@ define('local_samce/transport', [], function() {
     'use strict';
 
     var METHOD = 'local_samce_send_events';
-    var DEFAULT_TIMEOUT_MS = 5000;
+    var ACCEPT_METHOD = 'local_samce_accept_notice';
+    var DEFAULT_TIMEOUT_MS = 10000;
     var STATUSES = ['ok', 'disabled', 'rejected', 'retry'];
 
     /**
@@ -34,10 +35,56 @@ define('local_samce/transport', [], function() {
             return fetch(url, request);
         } : null);
         var timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-        var url = options.wwwroot + '/lib/ajax/service.php?sesskey=' + encodeURIComponent(options.sesskey) +
-            '&info=' + METHOD;
+        var serviceUrl = function(method) {
+            return options.wwwroot + '/lib/ajax/service.php?sesskey=' + encodeURIComponent(options.sesskey) +
+                '&info=' + method;
+        };
+        var url = serviceUrl(METHOD);
+
+        /** Traduce la respuesta de Moodle a un estado. Nunca lanza. */
+        var statusOf = function(response) {
+            if (!response.ok) {
+                return Promise.resolve('retry');
+            }
+            return response.json().then(function(body) {
+                var first = Array.isArray(body) ? body[0] : null;
+                if (first && first.error === false && first.data && STATUSES.indexOf(first.data.status) !== -1) {
+                    return first.data.status;
+                }
+                // Moodle respondió con un error (sesión vencida, mantenimiento…):
+                // no es algo que el alumno tenga que ver, se reintenta más tarde.
+                return 'retry';
+            });
+        };
 
         return {
+            /**
+             * Registra, del lado del servidor, que el alumno vio el aviso de
+             * monitoreo de este intento. Sin esa constancia Moodle no acepta
+             * ningún evento del intento (local_samce_send_events devuelve
+             * 'disabled').
+             *
+             * @param {number} attemptId
+             * @return {Promise<string>} 'ok', 'disabled', 'rejected' o 'retry'.
+             */
+            accept: function(attemptId) {
+                if (!fetchFn) {
+                    return Promise.resolve('retry');
+                }
+                try {
+                    return fetchFn(serviceUrl(ACCEPT_METHOD), {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'same-origin',
+                        body: JSON.stringify([{index: 0, methodname: ACCEPT_METHOD, args: {attemptid: attemptId}}])
+                    }).then(statusOf).catch(function() {
+                        return 'retry';
+                    });
+                } catch (e) {
+                    return Promise.resolve('retry');
+                }
+            },
+
             /**
              * @param {number} attemptId
              * @param {Object[]} events
@@ -89,20 +136,7 @@ define('local_samce/transport', [], function() {
                 };
 
                 try {
-                    return fetchFn(url, request).then(function(response) {
-                        if (!response.ok) {
-                            return 'retry';
-                        }
-                        return response.json().then(function(body) {
-                            var first = Array.isArray(body) ? body[0] : null;
-                            if (first && first.error === false && first.data && STATUSES.indexOf(first.data.status) !== -1) {
-                                return first.data.status;
-                            }
-                            // Moodle respondió con un error (sesión vencida, mantenimiento…):
-                            // no es algo que el alumno tenga que ver, se reintenta más tarde.
-                            return 'retry';
-                        });
-                    }).then(done, function() {
+                    return fetchFn(url, request).then(statusOf                    ).then(done, function() {
                         return done('retry');
                     });
                 } catch (e) {
