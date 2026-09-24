@@ -126,9 +126,29 @@ define('local_samce/consent_notice', [], function() {
         button.textContent = texts.accept;
         button.style.cssText = 'background:#2a6b2a;color:#fff;border:0;border-radius:4px;' +
             'padding:10px 22px;font-size:15px;font-weight:600;cursor:pointer;';
+        var errorLine = doc.createElement('p');
+        errorLine.setAttribute('role', 'alert');
+        errorLine.style.cssText = 'display:none;margin:0 0 14px;color:#7a1f1f;font-weight:600;';
+
         button.addEventListener('click', function() {
-            close();
-            onAccept();
+            if (!texts.manual) {
+                close();
+                onAccept();
+                return;
+            }
+            // Modo manual: el aviso queda hasta que quien lo llamó confirma. Sirve
+            // para esperar al servidor antes de dejar seguir, y para mostrar un error
+            // si no pudo registrar la lectura.
+            button.disabled = true;
+            errorLine.style.display = 'none';
+            onAccept({
+                close: close,
+                fail: function(message) {
+                    button.disabled = false;
+                    errorLine.textContent = message;
+                    errorLine.style.display = 'block';
+                }
+            });
         });
 
         var decline = doc.createElement('button');
@@ -144,6 +164,7 @@ define('local_samce/consent_notice', [], function() {
 
         box.appendChild(title);
         box.appendChild(body);
+        box.appendChild(errorLine);
         box.appendChild(button);
         box.appendChild(decline);
         overlay.appendChild(box);

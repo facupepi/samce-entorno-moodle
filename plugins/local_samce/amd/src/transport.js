@@ -64,19 +64,22 @@ define('local_samce/transport', [], function() {
              * ningún evento del intento (local_samce_send_events devuelve
              * 'disabled').
              *
-             * @param {number} attemptId
+             * @param {number|Object} reference id del intento, o {cmid} del cuestionario.
              * @return {Promise<string>} 'ok', 'disabled', 'rejected' o 'retry'.
              */
-            accept: function(attemptId) {
+            accept: function(reference) {
                 if (!fetchFn) {
                     return Promise.resolve('retry');
                 }
+                // Un número es el id del intento; un objeto {cmid} es el cuestionario, antes
+                // de que exista el intento.
+                var args = typeof reference === 'object' ? reference : {attemptid: reference};
                 try {
                     return fetchFn(serviceUrl(ACCEPT_METHOD), {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         credentials: 'same-origin',
-                        body: JSON.stringify([{index: 0, methodname: ACCEPT_METHOD, args: {attemptid: attemptId}}])
+                        body: JSON.stringify([{index: 0, methodname: ACCEPT_METHOD, args: args}])
                     }).then(statusOf).catch(function() {
                         return 'retry';
                     });
