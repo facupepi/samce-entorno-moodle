@@ -90,6 +90,26 @@ define('local_samce/sig_focus', [], function() {
         doc.addEventListener('visibilitychange', onVisibility);
         var interval = win.setInterval(check, POLL_MS);
 
+        /**
+         * Cierra el tramo oculto que quedó abierto cuando la página se está
+         * yendo de verdad (pagehide), no cuando solo se oculta (cambio de
+         * pestaña, minimizar): eso puede volver, esto no. Sin esto, cada
+         * pregunta nueva de un cuestionario paginado deja un visibility_hidden
+         * sin su visibility_visible, indistinguible de ocultar la pestaña de
+         * verdad (detectado rindiendo un examen real, no leyendo el código).
+         *
+         * @param {Object} [flushOptions]
+         * @param {boolean} [flushOptions.unloading] la página se está yendo.
+         */
+        var flush = env.safe(function(flushOptions) {
+            if (!flushOptions || !flushOptions.unloading || hiddenAt === null) {
+                return;
+            }
+            var away = env.now() - hiddenAt;
+            hiddenAt = null;
+            env.emit('visibility_visible', {away_ms: away, reason: 'unload'});
+        });
+
         return {
             // También dentro de los editores de texto: ahí llega el "blur" del
             // cambio de aplicación cuando el foco está en el editor.
@@ -116,7 +136,7 @@ define('local_samce/sig_focus', [], function() {
                 doc.removeEventListener('visibilitychange', onVisibility);
             },
 
-            flush: function() {}
+            flush: flush
         };
     };
 
