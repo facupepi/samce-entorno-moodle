@@ -8,7 +8,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_samce';
-$plugin->version   = 2026092402;       // YYYYMMDDXX.
+$plugin->version   = 2026092403;       // YYYYMMDDXX.
 $plugin->requires  = 2024100700;       // Moodle 4.5.
 $plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.3.1';
+$plugin->release   = '0.3.2';

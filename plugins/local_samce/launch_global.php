@@ -52,6 +52,9 @@ foreach ($courses as $course) {
 
 $now = time();
 $claims = [
+    // Ver el comentario de launch.php: distingue este token de un aviso de
+    // examen firmado con el mismo secreto.
+    'token_type'     => 'launch',
     'moodle_user_id' => (int) $USER->id,
     'username'       => $USER->username,
     'display_name'   => fullname($USER),

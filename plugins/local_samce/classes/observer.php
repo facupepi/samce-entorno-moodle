@@ -82,6 +82,10 @@ class observer {
 
         $now = time();
         $claims = [
+            // Distingue este aviso de un token de lanzamiento del docente
+            // (launch.php/launch_global.php), firmado con el mismo secreto:
+            // sin esto, este aviso también pasaba la verificación del panel.
+            'token_type'        => 'exam_event',
             'event_type'        => $eventtype,
             'moodle_attempt_id' => (int) $event->objectid,
             'moodle_user_id'    => (int) $event->relateduserid,

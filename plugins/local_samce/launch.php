@@ -42,6 +42,11 @@ if (empty($panelurl)) {
 
 $now = time();
 $claims = [
+    // Distingue este token de un aviso de examen (observer.php) firmado con
+    // el mismo secreto: sin esto, un aviso de "arrancó el examen" (que
+    // cualquier alumno dispara con solo abrir un intento) también pasa la
+    // verificación del lanzamiento del docente.
+    'token_type'     => 'launch',
     'moodle_user_id' => (int) $USER->id,
     'username'       => $USER->username,
     'display_name'   => fullname($USER),
