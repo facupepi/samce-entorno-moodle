@@ -113,13 +113,30 @@ define('local_samce/queue', [], function() {
             },
 
             /**
-             * Saca los primeros eventos, una vez que el servidor los recibió
-             * (o los rechazó para siempre).
+             * Saca los eventos ya confirmados: los que tengan seq <= upToSeq,
+             * sin importar cuántos sean ni si siguen estando en el frente.
              *
-             * @param {number} count
+             * Identificar por seq y no por cantidad es lo que hace esto
+             * idempotente. Dos vaciados pueden superponerse de verdad —
+             * pagehide y visibilitychange casi juntos en una sola navegación
+             * de página disparan cada uno su propio peek/send/drop sobre la
+             * misma cola (capture.js deja pasar el de keepalive incluso con
+             * uno ya en curso, a propósito, para no perder lo que se
+             * acumuló) — y un drop por cantidad, ciego a qué haya en el
+             * frente en ese instante, puede terminar sacando eventos que la
+             * otra confirmación nunca llegó a mandar. Lo mismo pasa si la
+             * cola se desborda (ver el recorte de arriba) entre el peek y
+             * este llamado: el frente ya no es el mismo. Buscar por seq no
+             * depende de ninguna de las dos cosas.
+             *
+             * @param {number} upToSeq
              */
-            drop: function(count) {
-                pending.splice(0, count);
+            dropUpTo: function(upToSeq) {
+                var i = 0;
+                while (i < pending.length && pending[i].seq <= upToSeq) {
+                    i++;
+                }
+                pending.splice(0, i);
                 save();
             },
 
