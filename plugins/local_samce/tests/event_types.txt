@@ -1,4 +1,5 @@
 client_profile
+capture_status
 consent_accepted
 events_dropped
 focus_lost

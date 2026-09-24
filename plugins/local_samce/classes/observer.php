@@ -80,6 +80,15 @@ class observer {
             return;
         }
 
+        // Al entregar o abandonar: si la última página del intento corrió sin captura, se avisa.
+        if ($eventtype !== 'attempt_started' && (int) $event->relateduserid > 0) {
+            try {
+                capture_watch::check_previous_page((int) $event->relateduserid, (int) $event->objectid);
+            } catch (\Throwable $e) {
+                debugging('local_samce: no se pudo revisar la captura de la última página: ' . $e->getMessage(), DEBUG_NORMAL);
+            }
+        }
+
         $cm = get_coursemodule_from_id('quiz', (int) $event->contextinstanceid, 0, false, IGNORE_MISSING);
 
         // El nombre del alumno nunca viajaba (detectado por Facu en

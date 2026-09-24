@@ -56,6 +56,7 @@ class event_batch {
     /** Tipos de evento que acepta el backend. */
     const ALLOWED_TYPES = [
         'client_profile',
+        'capture_status',
         'consent_accepted',
         'events_dropped',
         'focus_lost',
