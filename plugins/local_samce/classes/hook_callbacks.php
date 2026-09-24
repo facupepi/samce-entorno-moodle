@@ -74,6 +74,25 @@ class hook_callbacks {
                 return;
             }
 
+            // Los exámenes monitoreados se rinden en Chrome, en una computadora.
+            // Con otro navegador, o un teléfono o tablet, no se carga ni el aviso
+            // de consentimiento ni la captura: se tapa el examen con un aviso
+            // que solo deja volver. Sin el ajuste guardado (una instalación
+            // que nunca lo tocó) rige como encendido.
+            $restrict = get_config('local_samce', 'restrict_browser');
+            if (($restrict === false || (string) $restrict !== '0') &&
+                    !browser_check::is_supported((string) \core_useragent::get_user_agent_string())) {
+                $PAGE->requires->js_call_amd('local_samce/blocked', 'init', [[
+                    'title'   => get_string('browserblockedtitle', 'local_samce'),
+                    'body'    => get_string('browserblockedbody', 'local_samce'),
+                    'back'    => get_string('browserblockedback', 'local_samce'),
+                    'backurl' => $PAGE->cm
+                        ? (new \moodle_url('/mod/quiz/view.php', ['id' => $PAGE->cm->id]))->out(false)
+                        : '',
+                ]]);
+                return;
+            }
+
             // Se carga consent, no capture directo: HU11 (RF05) exige que la
             // captura no arranque sin la aceptación explícita del alumno. Es
             // consent.js el que decide, ya en el navegador, si hace falta

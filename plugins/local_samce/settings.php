@@ -40,4 +40,11 @@ if ($hassiteconfig) {
         get_string('captureenabled_desc', 'local_samce'),
         0
     ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_samce/restrict_browser',
+        get_string('restrictbrowser', 'local_samce'),
+        get_string('restrictbrowser_desc', 'local_samce'),
+        1
+    ));
 }
