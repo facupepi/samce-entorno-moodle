@@ -47,7 +47,7 @@ class retry_exam_event extends \core\task\adhoc_task {
             return;
         }
 
-        if (!backend_notifier::send_exam_event($claims, $secret, $backendurl)) {
+        if (!backend_notifier::send_exam_event($claims, $secret, $backendurl, true)) {
             throw new \moodle_exception('taskretryexameventfailed', 'local_samce');
         }
     }

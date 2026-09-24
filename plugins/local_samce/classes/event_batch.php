@@ -81,12 +81,23 @@ class event_batch {
      * codificarlo el backend lo recibiría como una lista y no como un
      * objeto, y rechazaría el lote entero.
      *
+     * Qué se rechaza entero y qué se recorta. Un evento con la forma rota
+     * (seq, t o tipo inválidos, o un data que no es un objeto) invalida el lote
+     * entero: es un lote manipulado o corrupto y no se aprovecha la mitad, igual
+     * que hace el backend. En cambio, lo accesorio se recorta sin tirar los
+     * eventos limpios que van al lado (punto 26 de la revisión externa del
+     * 23/09/2026): los campos de contexto `slot` y `qtype` con una forma
+     * inválida se sacan del evento, y un evento cuyo data pasa el tope de bytes
+     * se descarta él solo.
+     *
      * @param string $json Lista de eventos, cada uno con seq, t, type y data.
+     * @param int $dropped Se completa con cuántos eventos se descartaron por
+     *                     el tope de bytes de su data.
      * @return array|null Eventos limpios (seq, t, type y data como objeto), o
-     *                    null si el lote no es válido. Un lote inválido se
-     *                    rechaza entero, no se aprovecha la mitad.
+     *                    null si el lote no es válido o quedó vacío.
      */
-    public static function parse(string $json): ?array {
+    public static function parse(string $json, int &$dropped = 0): ?array {
+        $dropped = 0;
         $decoded = json_decode($json);
         if (!is_array($decoded) || count($decoded) === 0 || count($decoded) > self::MAX_EVENTS) {
             return null;
@@ -114,9 +125,14 @@ class event_batch {
             if (!is_object($data)) {
                 return null;
             }
+            self::trim_context($data);
             $encoded = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($encoded === false || strlen($encoded) > self::MAX_DATA_BYTES) {
+            if ($encoded === false) {
                 return null;
+            }
+            if (strlen($encoded) > self::MAX_DATA_BYTES) {
+                $dropped++;
+                continue;
             }
             $totaldata += strlen($encoded);
             if ($totaldata > self::MAX_BATCH_DATA_BYTES) {
@@ -126,7 +142,26 @@ class event_batch {
             $clean[] = ['seq' => $seq, 't' => $time, 'type' => $type, 'data' => $data];
         }
 
-        return $clean;
+        return $clean === [] ? null : $clean;
+    }
+
+    /** Forma válida de un qtype (la misma que aplica el navegador). */
+    const QTYPE_PATTERN = '/^[a-z][a-z0-9_]{0,31}$/';
+
+    /**
+     * Saca de un data los campos de contexto de pregunta con una forma
+     * inválida: `slot` tiene que ser un entero y `qtype` un texto corto con el
+     * alfabeto de los tipos de pregunta de Moodle. Sin esto, un solo `qtype`
+     * enorme hacía que se descartara el lote entero con los eventos limpios
+     * que iban al lado.
+     */
+    private static function trim_context(\stdClass $data): void {
+        if (isset($data->slot) && !is_int($data->slot)) {
+            unset($data->slot);
+        }
+        if (isset($data->qtype) && (!is_string($data->qtype) || !preg_match(self::QTYPE_PATTERN, $data->qtype))) {
+            unset($data->qtype);
+        }
     }
 
     /**

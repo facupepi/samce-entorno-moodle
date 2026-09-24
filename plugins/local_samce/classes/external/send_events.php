@@ -102,7 +102,12 @@ class send_events extends external_api {
             self::validate_context($context);
             require_capability('mod/quiz:attempt', $context);
 
-            $clean = event_batch::parse($params['events']);
+            $dropped = 0;
+            $clean = event_batch::parse($params['events'], $dropped);
+            if ($dropped > 0) {
+                debugging('local_samce: ' . $dropped . ' evento(s) con data demasiado grande se descartaron del lote ' .
+                    '(attemptid=' . (int) $params['attemptid'] . ')', DEBUG_NORMAL);
+            }
             if ($clean === null) {
                 // Hasta ahora este descarte era mudo (punto 20 de la revisión
                 // externa del 23/09/2026): el lote entero se pierde, y del
