@@ -75,6 +75,16 @@ define('local_samce/capture', [
         var sending = false;
         var failures = 0;
         var retryAt = 0;
+        // Cambiar de pregunta en un cuestionario paginado dispara
+        // visibilitychange a oculto y pagehide casi juntos, y los dos
+        // vacían con keepalive (a propósito: no esperan a que termine
+        // ningún otro envío). Sin esta bandera, cada cambio de pregunta
+        // mandaba el mismo lote dos veces por la red — inofensivo desde el
+        // fix de dropUpTo, pero tráfico de más en cada examen (punto 2 de
+        // la revisión externa del 23/09/2026, la parte de tráfico que
+        // quedó pendiente). Se resetea al volver a verse: un ocultamiento
+        // futuro tiene que volver a vaciar.
+        var keepaliveFlushed = false;
 
         // Ningún error de un detector puede llegar a la página.
         var safe = function(fn) {
@@ -176,15 +186,29 @@ define('local_samce/capture', [
 
             // Con la página cerrándose u ocultándose, los detectores informan ya
             // lo que tienen acumulado (por ejemplo, el tiempo de cada pregunta).
+            // Esto corre siempre, aunque el envío de más abajo se termine
+            // frenando: lo que una señal encole acá queda guardado igual, y
+            // sale en el próximo vaciado que sí llegue a mandar (el de la
+            // página siguiente, por ejemplo).
             signals.forEach(function(signal) {
                 safe(signal.flush)({final: !!flushOptions.keepalive, unloading: !!flushOptions.unloading});
             });
+
+            // Cambiar de pregunta en un cuestionario paginado dispara
+            // visibilitychange a oculto y pagehide casi juntos, y los dos
+            // llegan hasta acá con keepalive. Sin este freno, cada cambio de
+            // pregunta mandaba el mismo lote dos veces por la red —
+            // inofensivo desde dropUpTo, pero tráfico de más en cada examen.
+            var yaVacioPorEsteOcultamiento = flushOptions.keepalive && keepaliveFlushed;
+            if (flushOptions.keepalive) {
+                keepaliveFlushed = true;
+            }
 
             // El vaciado final sale aunque haya un envío en curso: la página se
             // está yendo y lo que se acumuló desde entonces no tendría otra
             // oportunidad. Repetir el principio de la cola no hace daño, el
             // backend descarta lo que ya tiene (clave única por sesión y seq).
-            if ((sending && !flushOptions.keepalive) || queue.size() === 0) {
+            if (yaVacioPorEsteOcultamiento || (sending && !flushOptions.keepalive) || queue.size() === 0) {
                 return Promise.resolve();
             }
             if (!flushOptions.force && now() < retryAt) {
@@ -257,6 +281,9 @@ define('local_samce/capture', [
         var onVisibility = safe(function() {
             if (doc.hidden) {
                 flush({force: true, keepalive: true});
+            } else {
+                // Volvió a verse: un ocultamiento futuro tiene que volver a vaciar.
+                keepaliveFlushed = false;
             }
         });
         var onOnline = safe(function() {

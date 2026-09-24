@@ -16,17 +16,6 @@ defined('MOODLE_INTERNAL') || die();
  */
 class observer {
 
-    /** Vigencia del token de evento: viaja en un POST inmediato, no en una
-     * URL, pero se mantiene corta por el mismo criterio que el lanzamiento
-     * del docente. */
-    const EVENT_TOKEN_TTL_SECONDS = 60;
-
-    /** Segundos que se espera para conectar con el backend. */
-    const REQUEST_CONNECT_TIMEOUT_SECONDS = 2;
-
-    /** Segundos que se espera, en total, por la respuesta del backend. */
-    const REQUEST_TIMEOUT_SECONDS = 3;
-
     /**
      * El alumno arrancó un intento de examen.
      *
@@ -59,8 +48,6 @@ class observer {
      * trae también el nombre del examen.
      */
     private static function notify_backend(string $eventtype, \core\event\base $event): void {
-        global $CFG;
-
         $secret = get_config('local_samce', 'launchsecret');
         $backendurl = get_config('local_samce', 'backendurl');
         if (empty($secret) || empty($backendurl)) {
@@ -80,7 +67,9 @@ class observer {
         $student = \core_user::get_user((int) $event->relateduserid);
         $studentname = $student ? fullname($student) : '';
 
-        $now = time();
+        // Sin iat ni exp acá: backend_notifier::send_exam_event() los pone,
+        // con la hora del intento que en definitiva se mande (el de ahora, o
+        // el de la tarea de reintento si hace falta).
         $claims = [
             // Distingue este aviso de un token de lanzamiento del docente
             // (launch.php/launch_global.php), firmado con el mismo secreto:
@@ -93,35 +82,22 @@ class observer {
             'course_id'         => (int) $event->courseid,
             'quiz_id'           => $cm ? (int) $cm->instance : 0,
             'quiz_name'         => $cm ? format_string($cm->name) : '',
-            'iat'               => $now,
-            'exp'               => $now + self::EVENT_TOKEN_TTL_SECONDS,
         ];
 
-        $token = token_signer::sign($claims, $secret);
-
-        require_once($CFG->libdir . '/filelib.php');
-        $curl = new \curl();
-        $curl->setHeader('Content-Type: application/json');
-        // Con timeouts propios: sin ellos el POST espera hasta 30 segundos
-        // para conectar y no tiene límite total de respuesta, y como el aviso
-        // de inicio sale mientras el alumno abre el examen, un backend que
-        // acepta la conexión y no contesta lo dejaría esperando. Ninguna falla
-        // del monitoreo puede demorar el examen.
-        $curl->post($backendurl, json_encode(['token' => $token]), [
-            'CURLOPT_CONNECTTIMEOUT' => self::REQUEST_CONNECT_TIMEOUT_SECONDS,
-            'CURLOPT_TIMEOUT'        => self::REQUEST_TIMEOUT_SECONDS,
-        ]);
-
-        // get_errno() solo ve fallas de red (no conectó, timeout): un 404 o
-        // un 500 del backend curl lo cuenta como éxito, y hasta ahora no
-        // quedaba ni un debugging() de esa clase de falla (punto 1 de la
-        // revisión externa del 23/09/2026). Sin la sesión que abre este
-        // aviso, todos los lotes de eventos de ese alumno se van a rechazar
-        // después, así que vale la pena verlo en el log del lado de Moodle.
-        $httpcode = (int) ($curl->get_info()['http_code'] ?? 0);
-        if ($curl->get_errno() || $httpcode >= 400) {
-            debugging('local_samce: fallo al notificar el evento "' . $eventtype . '" al backend' .
-                ($httpcode ? " (HTTP {$httpcode})" : '') . ': ' . $curl->error, DEBUG_NORMAL);
+        if (backend_notifier::send_exam_event($claims, $secret, $backendurl)) {
+            return;
         }
+
+        // El envío inmediato falló (backend_notifier ya dejó el debugging()
+        // con el motivo). Sin la sesión que abre este aviso, todos los
+        // lotes de eventos de este alumno se van a rechazar con 404 después
+        // (punto 1 de la revisión externa del 23/09/2026), así que se
+        // reintenta más tarde con una tarea en segundo plano, en vez de
+        // darlo por perdido acá. Se encolan los claims, no el token: el
+        // token ya firmado vence a los 60 segundos y la tarea puede tardar
+        // minutos en correr.
+        $task = new \local_samce\task\retry_exam_event();
+        $task->set_custom_data($claims);
+        \core\task\manager::queue_adhoc_task($task);
     }
 }

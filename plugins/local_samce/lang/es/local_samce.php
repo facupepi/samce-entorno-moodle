@@ -34,3 +34,5 @@ Marco legal: este tratamiento de datos se realiza en el marco de la Ley N.° 25.
 Para comenzar este examen es necesario aceptar este aviso.';
 $string['consentaccept'] = 'Acepto';
 $string['indicatortext'] = 'Este examen está siendo monitoreado';
+$string['taskretryexamevent'] = 'Reintentar un aviso de examen a SAMCE';
+$string['taskretryexameventfailed'] = 'No se pudo reintentar el aviso de examen a SAMCE';
