@@ -95,6 +95,10 @@ class accept_notice extends external_api {
             self::validate_context($context);
             require_capability('mod/quiz:attempt', $context);
 
+            // Cada vez que la captura arranca en una página del intento, se anota: es lo que
+            // permite saber que la página no corrió sin captura (capture_watch).
+            set_user_preference(\local_samce\capture_watch::SEEN_PREFIX . (int) $attempt->id, time());
+
             $name = self::PREFERENCE_PREFIX . (int) $attempt->id;
             // La primera hora es la que vale: un reenvío no la pisa.
             if (get_user_preferences($name, null) === null) {

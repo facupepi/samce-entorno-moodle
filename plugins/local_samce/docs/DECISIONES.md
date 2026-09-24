@@ -90,3 +90,22 @@ hasta que alguien la configure a propósito.
   paralelo porque el límite es del navegador para el total de envíos de cierre.
 - Un `seq` repetido con el mismo intento no es un error: es un reenvío, y el
   backend lo ignora a propósito (idempotencia por sesión y `seq`).
+
+## JavaScript apagado: se detecta y se marca, no se bloquea
+
+Un alumno que acepta el aviso y después apaga o bloquea el JavaScript no se puede
+frenar del lado del navegador: el JS corre en su máquina, y cualquier cosa que
+calcule el JS la puede calcular él leyendo el código. Se descartó bloquear el avance
+con un "latido" o una firma al navegar (riesgo para el alumno honesto si la captura
+falla, y falsificable igual). En cambio se detecta y se le marca al docente:
+
+- **`nojs.php`**: un bloque `<noscript>` en la página del examen enlaza una hoja de
+  estilos que el navegador pide SOLO con JavaScript apagado. Oculta el examen con un
+  cartel y le avisa al servidor. No es un bloqueo real (editar el CSS lo saltea).
+- **La página se entregó y la captura no arrancó**: el servidor anota cuándo entrega
+  cada página del intento y la captura anota cuándo arranca; si la entrega es anterior
+  y no hubo arranque, esa página corrió sin captura (`capture_watch`).
+- Ambos casos mandan al backend un `capture_status` (lo genera el servidor de Moodle),
+  y el backend además marca las sesiones sin eventos o con un silencio de 10 minutos o
+  más. El panel muestra "Sin captura". Es una señal y no una prueba.
+- Sin ningún pedido periódico: no hay latido.

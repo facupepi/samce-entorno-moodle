@@ -101,6 +101,12 @@ class hook_callbacks {
                 return;
             }
 
+            // Con JavaScript apagado el navegador pide nojs.php: oculta el examen y avisa al
+            // servidor que esta página se cargó sin captura (ver capture_watch).
+            $hook->add_html('<noscript><link rel="stylesheet" href="' . (new \moodle_url('/local/samce/nojs.php', [
+                'attempt' => (int) $attempt->id, 'sesskey' => sesskey(),
+            ]))->out(true) . '"></noscript>');
+
             // Se carga consent, no capture directo: HU11 (RF05) exige que la
             // captura no arranque sin la aceptación explícita del alumno. Es
             // consent.js el que decide, ya en el navegador, si hace falta
@@ -292,8 +298,16 @@ class hook_callbacks {
             $verdict = gate_policy::verdict($kind, $restrict, $browserok, $attemptnoticed, $startauth,
                 (bool) $unfinishednoticed, time());
 
-            if ($verdict === gate_policy::BIND) {
-                set_user_preference($prefix . $attempt->id, time());
+            if ($verdict === gate_policy::BIND || $verdict === gate_policy::ALLOW) {
+                if ($verdict === gate_policy::BIND) {
+                    set_user_preference($prefix . $attempt->id, time());
+                }
+                // Cada entrega de una página del intento: si la anterior corrió sin que la
+                // captura arrancara, se avisa; y se anota esta.
+                if ($attempt) {
+                    capture_watch::check_previous_page((int) $USER->id, (int) $attempt->id);
+                    capture_watch::mark_delivered((int) $USER->id, (int) $attempt->id);
+                }
             } else if ($verdict === gate_policy::NOTICE) {
                 $redirect = [$cm->id, get_string('gatenoticerequired', 'local_samce')];
             } else if ($verdict === gate_policy::BROWSER) {

@@ -48,6 +48,9 @@ class provider implements
             \local_samce\external\accept_notice::START_PREFERENCE_PREFIX . '<cuestionario>',
             'privacy:preference:start'
         );
+        $collection->add_user_preference(\local_samce\capture_watch::PAGE_PREFIX . '<intento>', 'privacy:preference:page');
+        $collection->add_user_preference(\local_samce\capture_watch::SEEN_PREFIX . '<intento>', 'privacy:preference:seen');
+        $collection->add_user_preference(\local_samce\capture_watch::ALERT_PREFIX . '<estado>_<intento>', 'privacy:preference:alert');
 
         return $collection;
     }
@@ -61,6 +64,9 @@ class provider implements
         $strings = [
             \local_samce\external\accept_notice::PREFERENCE_PREFIX => 'privacy:preference:notice',
             \local_samce\external\accept_notice::START_PREFERENCE_PREFIX => 'privacy:preference:start',
+            \local_samce\capture_watch::PAGE_PREFIX => 'privacy:preference:page',
+            \local_samce\capture_watch::SEEN_PREFIX => 'privacy:preference:seen',
+            \local_samce\capture_watch::ALERT_PREFIX => 'privacy:preference:alert',
         ];
         $preferences = get_user_preferences(null, null, $userid);
         foreach ((array) $preferences as $name => $value) {
