@@ -29,22 +29,34 @@ class accept_notice extends external_api {
     /** Prefijo de la preferencia de usuario; el resto es el id del intento. */
     const PREFERENCE_PREFIX = 'local_samce_notice_';
 
+    /**
+     * Prefijo de la autorización de comienzo: se guarda al tocar "Leí el aviso y
+     * continúo" en la página del cuestionario, cuando todavía no existe el
+     * intento. La puerta del servidor (hook_callbacks::after_config) la exige
+     * para crear un intento nuevo.
+     */
+    const START_PREFERENCE_PREFIX = 'local_samce_start_';
+
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            'attemptid' => new external_value(PARAM_INT, 'Id del intento de examen'),
+            'attemptid' => new external_value(PARAM_INT, 'Id del intento de examen', VALUE_DEFAULT, 0),
+            'cmid' => new external_value(PARAM_INT, 'Id del módulo del cuestionario, antes de que exista el intento',
+                VALUE_DEFAULT, 0),
         ]);
     }
 
     /**
-     * @param int $attemptid Intento cuyo aviso se vio.
+     * @param int $attemptid Intento cuyo aviso se vio (0 si se manda cmid).
+     * @param int $cmid Cuestionario cuyo aviso se vio, antes de comenzar el intento (0 si se manda attemptid).
      * @return array status: 'ok', 'disabled' (la captura está apagada o mal
      *               configurada) o 'rejected' (no es un intento propio en curso).
      */
-    public static function execute(int $attemptid): array {
+    public static function execute(int $attemptid = 0, int $cmid = 0): array {
         global $DB, $USER;
 
         try {
-            $params = self::validate_parameters(self::execute_parameters(), ['attemptid' => $attemptid]);
+            $params = self::validate_parameters(self::execute_parameters(),
+                ['attemptid' => $attemptid, 'cmid' => $cmid]);
 
             if (!get_config('local_samce', 'capture_enabled')) {
                 return ['status' => 'disabled'];
@@ -52,6 +64,20 @@ class accept_notice extends external_api {
             $secret = get_config('local_samce', 'launchsecret');
             if (empty($secret) || event_batch::events_url((string) get_config('local_samce', 'backendurl')) === '') {
                 return ['status' => 'disabled'];
+            }
+
+            if ($params['cmid'] > 0) {
+                // Antes de comenzar: todavía no hay intento. Se guarda la hora, que la
+                // puerta del servidor exige (y vence) para crear el intento.
+                $cm = get_coursemodule_from_id('quiz', $params['cmid'], 0, false, IGNORE_MISSING);
+                if (!$cm) {
+                    return ['status' => 'rejected'];
+                }
+                $context = \context_module::instance($cm->id);
+                self::validate_context($context);
+                require_capability('mod/quiz:attempt', $context);
+                set_user_preference(self::START_PREFERENCE_PREFIX . (int) $cm->id, time());
+                return ['status' => 'ok'];
             }
 
             $attempt = $DB->get_record('quiz_attempts', ['id' => $params['attemptid']],

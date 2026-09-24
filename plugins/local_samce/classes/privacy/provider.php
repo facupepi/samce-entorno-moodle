@@ -44,6 +44,10 @@ class provider implements
             \local_samce\external\accept_notice::PREFERENCE_PREFIX . '<intento>',
             'privacy:preference:notice'
         );
+        $collection->add_user_preference(
+            \local_samce\external\accept_notice::START_PREFERENCE_PREFIX . '<cuestionario>',
+            'privacy:preference:start'
+        );
 
         return $collection;
     }
@@ -54,18 +58,23 @@ class provider implements
      * @param int $userid
      */
     public static function export_user_preferences(int $userid) {
-        $prefix = \local_samce\external\accept_notice::PREFERENCE_PREFIX;
+        $strings = [
+            \local_samce\external\accept_notice::PREFERENCE_PREFIX => 'privacy:preference:notice',
+            \local_samce\external\accept_notice::START_PREFERENCE_PREFIX => 'privacy:preference:start',
+        ];
         $preferences = get_user_preferences(null, null, $userid);
         foreach ((array) $preferences as $name => $value) {
-            if (strpos((string) $name, $prefix) !== 0) {
-                continue;
+            foreach ($strings as $prefix => $stringid) {
+                if (strpos((string) $name, $prefix) !== 0) {
+                    continue;
+                }
+                \core_privacy\local\request\writer::export_user_preference(
+                    'local_samce',
+                    $name,
+                    \core_privacy\local\request\transform::datetime((int) $value),
+                    get_string($stringid, 'local_samce')
+                );
             }
-            \core_privacy\local\request\writer::export_user_preference(
-                'local_samce',
-                $name,
-                \core_privacy\local\request\transform::datetime((int) $value),
-                get_string('privacy:preference:notice', 'local_samce')
-            );
         }
     }
 }

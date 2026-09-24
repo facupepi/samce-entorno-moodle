@@ -168,11 +168,16 @@ class hook_callbacks {
 
         $PAGE->requires->js_call_amd('local_samce/consent_gate', 'init', [[
             'cmid'                => (int) $PAGE->cm->id,
-            'unfinishedattemptid' => $unfinished ? (int) $unfinished : 0,
+            // Solo si el servidor ya tiene la constancia de ese intento: si no, retomarlo
+            // exige aceptar el aviso de nuevo (la puerta del servidor lo frena).
+            'unfinishedattemptid' => ($unfinished && get_user_preferences(
+                \local_samce\external\accept_notice::PREFERENCE_PREFIX . $unfinished, null) !== null)
+                ? (int) $unfinished : 0,
             'noticetitle'         => get_string('consentnoticetitle', 'local_samce'),
             'noticebody'          => self::notice_body(),
             'noticeaccept'        => get_string('consentaccept', 'local_samce'),
             'noticedecline'       => get_string('consentdecline', 'local_samce'),
+            'accepterror'         => get_string('consentaccepterror', 'local_samce'),
         ]]);
     }
 
@@ -185,9 +190,123 @@ class hook_callbacks {
         $a = new \stdClass();
         $controller = trim((string) get_config('local_samce', 'controllercontact'));
         $a->controller = $controller !== '' ? $controller : get_string('controllerdefault', 'local_samce');
+        // El ajuste es la cantidad de días (por ejemplo, 90): el texto para el alumno lo
+        // arma el plugin. Un valor que no es un número se muestra tal cual.
         $retention = trim((string) get_config('local_samce', 'retentionnotice'));
-        $a->retention = $retention !== '' ? $retention : get_string('retentiondefault', 'local_samce');
+        if ($retention !== '' && ctype_digit($retention) && (int) $retention > 0) {
+            $days = (int) $retention;
+            $a->retention = get_string($days === 1 ? 'retentionday' : 'retentiondays', 'local_samce', $days);
+        } else if ($retention !== '') {
+            $a->retention = $retention;
+        } else {
+            $a->retention = get_string('retentiondefault', 'local_samce');
+        }
 
         return get_string('consentnoticebody', 'local_samce', $a);
+    }
+
+    /**
+     * La puerta del servidor. Corre en cada pedido, apenas Moodle terminó de
+     * armar la configuración y ya con el usuario identificado, y frena a un
+     * alumno que quiere comenzar o seguir un examen monitoreado si:
+     * - no consta en el servidor que vio el aviso de monitoreo, o
+     * - su navegador no es Chrome de escritorio (con el ajuste encendido).
+     *
+     * Es lo que impide saltear el aviso: el cartel de JavaScript se puede borrar
+     * con las herramientas del navegador o desactivando JavaScript, pero el
+     * servidor no crea el intento ni entrega las preguntas sin la constancia, y
+     * esa constancia solo se genera pasando por el aviso.
+     *
+     * Barato para todo lo que no es un examen: lo primero que mira es el script.
+     * Si algo falla del lado del plugin la puerta deja pasar y lo registra: un
+     * error nuestro no puede dejar a todos los alumnos sin rendir. Se apaga
+     * desactivando capture_enabled.
+     *
+     * @param \core\hook\after_config $hook
+     */
+    public static function after_config(\core\hook\after_config $hook): void {
+        global $DB, $USER;
+
+        $redirect = null;
+        try {
+            if (defined('CLI_SCRIPT') && CLI_SCRIPT) {
+                return;
+            }
+            $kind = gate_policy::kind_of_script((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+            if ($kind === null || !isloggedin() || isguestuser()) {
+                return;
+            }
+            if (!get_config('local_samce', 'capture_enabled')) {
+                return;
+            }
+            $secret = get_config('local_samce', 'launchsecret');
+            if (empty($secret) || event_batch::events_url((string) get_config('local_samce', 'backendurl')) === '') {
+                return;
+            }
+
+            // Qué examen (y, si corresponde, qué intento).
+            $attempt = null;
+            if ($kind === 'start') {
+                $cmid = optional_param('cmid', 0, PARAM_INT);
+                $cm = $cmid > 0 ? get_coursemodule_from_id('quiz', $cmid, 0, false, IGNORE_MISSING) : false;
+            } else {
+                $attemptid = optional_param('attempt', 0, PARAM_INT);
+                $attempt = $attemptid > 0 ? $DB->get_record('quiz_attempts', ['id' => $attemptid],
+                    'id, quiz, userid, state, preview, timestart') : false;
+                if (!$attempt || (int) $attempt->userid !== (int) $USER->id ||
+                        $attempt->state !== 'inprogress' || !empty($attempt->preview)) {
+                    return;
+                }
+                $cm = get_coursemodule_from_instance('quiz', $attempt->quiz, 0, false, IGNORE_MISSING);
+            }
+            if (!$cm) {
+                return;
+            }
+
+            // Solo a quien rinde: docentes y administradores (vista previa) no.
+            $context = \context_module::instance($cm->id);
+            if (!has_capability('mod/quiz:attempt', $context) || has_capability('mod/quiz:preview', $context)) {
+                return;
+            }
+
+            $restrict = get_config('local_samce', 'restrict_browser');
+            $restrict = ($restrict === false || (string) $restrict !== '0');
+            $browserok = browser_check::is_supported((string) \core_useragent::get_user_agent_string());
+
+            $prefix = \local_samce\external\accept_notice::PREFERENCE_PREFIX;
+            $startprefix = \local_samce\external\accept_notice::START_PREFERENCE_PREFIX;
+            $startauth = get_user_preferences($startprefix . $cm->id, null);
+            $startauth = $startauth === null ? null : (int) $startauth;
+
+            $attemptnoticed = false;
+            $unfinishednoticed = false;
+            if ($attempt) {
+                $attemptnoticed = get_user_preferences($prefix . $attempt->id, null) !== null;
+            } else {
+                $unfinished = $DB->get_field_select('quiz_attempts', 'id',
+                    'quiz = :quiz AND userid = :userid AND state = :state AND preview = 0',
+                    ['quiz' => $cm->instance, 'userid' => $USER->id, 'state' => 'inprogress']);
+                $unfinishednoticed = $unfinished && get_user_preferences($prefix . $unfinished, null) !== null;
+            }
+
+            $verdict = gate_policy::verdict($kind, $restrict, $browserok, $attemptnoticed, $startauth,
+                (bool) $unfinishednoticed, time());
+
+            if ($verdict === gate_policy::BIND) {
+                set_user_preference($prefix . $attempt->id, time());
+            } else if ($verdict === gate_policy::NOTICE) {
+                $redirect = [$cm->id, get_string('gatenoticerequired', 'local_samce')];
+            } else if ($verdict === gate_policy::BROWSER) {
+                $redirect = [$cm->id, get_string('gatebrowserrequired', 'local_samce')];
+            }
+        } catch (\Throwable $e) {
+            debugging('local_samce: la puerta del servidor falló y deja pasar: ' . $e->getMessage(), DEBUG_NORMAL);
+            return;
+        }
+
+        if ($redirect !== null) {
+            redirect(new \moodle_url('/mod/quiz/view.php', ['id' => $redirect[0]]), $redirect[1], null,
+                \core\output\notification::NOTIFY_ERROR);
+        }
     }
 }

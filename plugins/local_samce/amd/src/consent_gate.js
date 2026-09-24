@@ -21,7 +21,7 @@
  * @module     local_samce/consent_gate
  * @copyright  SAMCE
  */
-define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Notice) {
+define('local_samce/consent_gate', ['local_samce/consent_notice', 'local_samce/transport'], function(Notice, Transport) {
     'use strict';
 
     var START_FORM = 'form[action*="/mod/quiz/startattempt.php"]';
@@ -35,6 +35,7 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
          * @param {string} config.noticebody
          * @param {string} config.noticeaccept
          * @param {string} config.noticedecline
+         * @param {string} [config.accepterror] qué se le dice si el servidor no registra la lectura.
          * @param {Object} [deps] solo para pruebas: {now}.
          */
         init: function(config, deps) {
@@ -57,6 +58,16 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
                     return;
                 }
 
+                var moodleConfig = window.M && window.M.cfg;
+                var transport = moodleConfig ?
+                    Transport.create({wwwroot: moodleConfig.wwwroot, sesskey: moodleConfig.sesskey}) : null;
+                // Deja constancia en el servidor de que leyó el aviso de este cuestionario.
+                // 'disabled' es que la captura está apagada o mal configurada: ahí el servidor
+                // tampoco frena, y se sigue.
+                var registerNotice = function() {
+                    return transport ? transport.accept({cmid: config.cmid}) : Promise.resolve('retry');
+                };
+
                 var doc = document;
                 var allowed = false;
                 var showing = false;
@@ -77,18 +88,31 @@ define('local_samce/consent_gate', ['local_samce/consent_notice'], function(Noti
                         title: config.noticetitle,
                         body: config.noticebody,
                         accept: config.noticeaccept,
-                        decline: config.noticedecline
-                    }, function() {
-                        showing = false;
-                        // Si guardar la aceptación pendiente falla, igual sigue: la
-                        // página del intento vuelve a pedirla.
-                        try {
-                            Notice.setPending(storage, config.cmid, now());
-                        } catch (e) {
-                            // Nada más que intentar.
-                        }
-                        allowed = true;
-                        retry();
+                        decline: config.noticedecline,
+                        manual: true
+                    }, function(controls) {
+                        // El servidor exige la constancia para crear el intento (la puerta del
+                        // servidor): se espera a que la confirme antes de dejar seguir. Sin
+                        // confirmación no se sigue, y se le dice al alumno que reintente.
+                        registerNotice().then(function(status) {
+                            if (status !== 'ok' && status !== 'disabled') {
+                                controls.fail(config.accepterror || '');
+                                return;
+                            }
+                            showing = false;
+                            // Si guardar la aceptación pendiente falla, igual sigue: la
+                            // página del intento vuelve a pedirla.
+                            try {
+                                Notice.setPending(storage, config.cmid, now());
+                            } catch (e) {
+                                // Nada más que intentar.
+                            }
+                            allowed = true;
+                            controls.close();
+                            retry();
+                        }).catch(function() {
+                            controls.fail(config.accepterror || '');
+                        });
                     }, function() {
                         // No aceptó: el aviso se cierra y no se crea ningún intento.
                         showing = false;
