@@ -12,6 +12,11 @@ defined('MOODLE_INTERNAL') || die();
  * de Moodle, para poder probarla sin bootstrapear un Moodle (igual que
  * event_batch y token_signer).
  *
+ * Los navegadores automatizados de prueba (HeadlessChrome, el de Playwright)
+ * pasan a propósito: se anuncian como `HeadlessChrome/<versión>`, y sin ese
+ * permiso ningún caso de prueba automatizado podría rendir un examen. Es una
+ * decisión y no un efecto lateral de la expresión: hay un test que la fija.
+ *
  * Límites, que conviene tener presentes: el User-Agent lo puede falsear quien
  * quiera, así que esto ordena el uso normal y no es un control a prueba de
  * trampas; Brave y otros navegadores basados en Chromium se identifican como
@@ -33,7 +38,7 @@ class browser_check {
      * @return bool true si es Chrome de escritorio.
      */
     public static function is_supported(string $useragent): bool {
-        if ($useragent === '' || !preg_match('~\bChrome/\d+~', $useragent)) {
+        if ($useragent === '' || !preg_match('~Chrome/\d+~', $useragent)) {
             return false;
         }
         if (preg_match(self::NOT_CHROME, $useragent)) {

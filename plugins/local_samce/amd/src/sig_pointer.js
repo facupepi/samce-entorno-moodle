@@ -66,9 +66,17 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
         var moves = 0;
         var lastSampleAt = 0;
         var lastMoveAt = env.now();
+        var hasMoved = false;
         var lastFlushAt = env.now();
         var leftAt = null;
+        // La pausa más larga DENTRO de esta ventana, y el hueco desde el último
+        // movimiento de una ventana anterior si es el primero de esta. Antes
+        // idle_ms se medía contra el último movimiento aunque fuera de tramos
+        // anteriores: salía "15 s sin mover" en una ventana de 5 s, y al revés,
+        // 15 s casi quietos quedaban informados como "300 ms" (revisión del
+        // 24/09/2026, punto 3.2).
         var longestGap = 0;
+        var gapBefore = null;
         var idleReported = false;
 
         var onMove = env.safe(function() {
@@ -77,8 +85,12 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 return;
             }
             lastSampleAt = now;
-            longestGap = Math.max(longestGap, now - lastMoveAt);
+            if (moves === 0 && hasMoved && lastMoveAt < lastFlushAt) {
+                gapBefore = Math.max(0, Math.round(now - lastMoveAt));
+            }
+            longestGap = Math.max(longestGap, now - Math.max(lastMoveAt, lastFlushAt));
             lastMoveAt = now;
+            hasMoved = true;
             idleReported = false;
             moves += 1;
         });
@@ -106,7 +118,8 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
         var lastTickAt = env.now();
         var tick = env.safe(function() {
             var now = env.now();
-            var elapsed = Math.min(now - lastTickAt, MAX_TICK_MS);
+            // Si el reloj se corrigió hacia atrás la diferencia es negativa: no se descuenta tiempo.
+            var elapsed = Math.max(0, Math.min(now - lastTickAt, MAX_TICK_MS));
             lastTickAt = now;
             if (doc.hidden) {
                 return;
@@ -161,16 +174,26 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                 // Largo real de la ventana que resume el evento: el normal es de
                 // 5 s, pero los vaciados por salir de la página o volver la
                 // conexión la acortan.
-                var windowMs = Math.round(now - lastFlushAt);
-                lastFlushAt = now;
+                var windowMs = Math.max(0, Math.round(now - lastFlushAt));
                 if (moves > 0) {
-                    env.emit('mouse_activity', {moves: moves, idle_ms: longestGap, window_ms: windowMs});
-                    moves = 0;
-                    longestGap = 0;
+                    // La pausa final, desde el último movimiento hasta el cierre de la ventana.
+                    var data = {
+                        moves: moves,
+                        idle_ms: Math.max(longestGap, now - lastMoveAt),
+                        window_ms: windowMs
+                    };
+                    if (gapBefore !== null) {
+                        data.gap_before_ms = gapBefore;
+                    }
+                    env.emit('mouse_activity', data);
                 } else if (!idleReported && now - lastMoveAt >= IDLE_MS) {
                     env.emit('mouse_activity', {moves: 0, idle_ms: now - lastMoveAt, window_ms: windowMs});
                     idleReported = true;
                 }
+                moves = 0;
+                longestGap = 0;
+                gapBefore = null;
+                lastFlushAt = now;
 
                 dwell.forEach(function(entry, slot) {
                     var due = final || !entry.inView || now - entry.since >= MAX_HOLD_MS;

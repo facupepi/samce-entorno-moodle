@@ -9,16 +9,20 @@ defined('MOODLE_INTERNAL') || die();
  * de alumnos a un servidor externo (punto 24 de la revisión externa del
  * 23/09/2026).
  *
- * Es un provider de metadata solamente, a propósito. No implementa exportar ni
- * borrar datos: el plugin no guarda nada localmente (db/ no tiene install.xml
- * y no hay ningún insert_record), y Moodle nunca exporta ni borra datos
- * alojados en un sistema externo. Declarar el envío lo hace visible y
+ * Declara el envío al backend (metadata) y la única cosa que el plugin guarda
+ * localmente: una preferencia de usuario por intento con la hora en que el
+ * alumno vio el aviso (local_samce_notice_<intento>), que se exporta con los
+ * datos del usuario y Moodle borra cuando borra al usuario. Moodle nunca
+ * exporta ni borra datos alojados en un sistema externo: lo que vive en el
+ * backend es problema aparte de este archivo (ver docs/PRIVACIDAD.md). Declarar el envío lo hace visible y
  * documentado para el administrador del sitio; el borrado real de lo que
  * guarda samce-backend es un problema aparte que este archivo no resuelve.
  *
  * @package local_samce
  */
-class provider implements \core_privacy\local\metadata\provider {
+class provider implements
+        \core_privacy\local\metadata\provider,
+        \core_privacy\local\request\user_preference_provider {
 
     /**
      * @param \core_privacy\local\metadata\collection $collection
@@ -36,6 +40,32 @@ class provider implements \core_privacy\local\metadata\provider {
             'interaction' => 'privacy:metadata:samce_backend:interaction',
         ], 'privacy:metadata:samce_backend');
 
+        $collection->add_user_preference(
+            \local_samce\external\accept_notice::PREFERENCE_PREFIX . '<intento>',
+            'privacy:preference:notice'
+        );
+
         return $collection;
+    }
+
+    /**
+     * Exporta la hora en que el usuario vio el aviso de cada intento.
+     *
+     * @param int $userid
+     */
+    public static function export_user_preferences(int $userid) {
+        $prefix = \local_samce\external\accept_notice::PREFERENCE_PREFIX;
+        $preferences = get_user_preferences(null, null, $userid);
+        foreach ((array) $preferences as $name => $value) {
+            if (strpos((string) $name, $prefix) !== 0) {
+                continue;
+            }
+            \core_privacy\local\request\writer::export_user_preference(
+                'local_samce',
+                $name,
+                \core_privacy\local\request\transform::datetime((int) $value),
+                get_string('privacy:preference:notice', 'local_samce')
+            );
+        }
     }
 }

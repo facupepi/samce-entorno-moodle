@@ -63,6 +63,15 @@ class observer {
     private static function notify_backend(string $eventtype, \core\event\base $event): void {
         global $DB;
 
+        // El observer está registrado para los intentos de TODO el sitio. Con la
+        // captura apagada no se avisa nada de nadie: antes este camino no miraba
+        // capture_enabled (lo miraba solo la captura del navegador), y con el
+        // ajuste en 0 igual salían los avisos con el nombre del alumno, el curso
+        // y el examen hacia el backend (revisión del 24/09/2026, punto 1.1).
+        if (!get_config('local_samce', 'capture_enabled')) {
+            return;
+        }
+
         $secret = get_config('local_samce', 'launchsecret');
         $backendurl = get_config('local_samce', 'backendurl');
         if (empty($secret) || empty($backendurl)) {
@@ -80,7 +89,8 @@ class observer {
         // confiable ($event->relateduserid) — el backend lo cifra igual que
         // el id antes de persistirlo (ver moodle_event.go).
         $student = \core_user::get_user((int) $event->relateduserid);
-        $studentname = $student ? fullname($student) : '';
+        // Acotado al largo de lo que el backend puede guardar.
+        $studentname = $student ? \core_text::substr(fullname($student), 0, 255) : '';
 
         // Contexto del cuestionario: sin el límite de tiempo y la cantidad de
         // preguntas no hay cómo comparar sesiones de exámenes distintos.
@@ -113,7 +123,7 @@ class observer {
             'student_name'      => $studentname,
             'course_id'         => (int) $event->courseid,
             'quiz_id'           => $cm ? (int) $cm->instance : 0,
-            'quiz_name'         => $cm ? format_string($cm->name) : '',
+            'quiz_name'         => $cm ? \core_text::substr(format_string($cm->name), 0, 255) : '',
             // Hora del hecho en Moodle. iat se vuelve a estampar en cada
             // reintento del cron, así que no sirve para saber cuándo
             // arrancó o se entregó el intento.

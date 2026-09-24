@@ -25,6 +25,11 @@ define('local_samce/queue', [], function() {
      * descartan los más viejos antes que crecer sin límite. */
     var DEFAULT_MAX_PENDING = 500;
 
+    /** El evento tal como sale hacia el servidor: sin la marca interna de no descartable. */
+    var plain = function(event) {
+        return {seq: event.seq, t: event.t, type: event.type, data: event.data};
+    };
+
     /** Bytes UTF-8 de un texto: lo que cuenta el servidor, no la cantidad de caracteres. */
     var utf8Length = function(text) {
         try {
@@ -41,6 +46,11 @@ define('local_samce/queue', [], function() {
      * @param {Function} [options.now] reloj en milisegundos (para pruebas).
      * @param {Function} [options.random] número al azar entre 0 y 1 (para pruebas).
      * @param {number} [options.maxPending]
+     * @param {number} [options.saveDelayMs] espera antes de escribir en el almacenamiento
+     *        (0 = en el acto). Con la cola llena, cada evento reescribía la cola entera
+     *        (~72 KB); con una espera se juntan las escrituras. persist() fuerza la
+     *        escritura y hay que llamarlo antes de que la página se vaya.
+     * @param {Function} [options.setTimeout] para pruebas.
      * @return {Object}
      */
     var create = function(options) {
@@ -49,6 +59,14 @@ define('local_samce/queue', [], function() {
         var now = options.now || Date.now;
         var random = options.random || Math.random;
         var maxPending = options.maxPending || DEFAULT_MAX_PENDING;
+        var saveDelayMs = options.saveDelayMs || 0;
+        var schedule = options.setTimeout || (typeof setTimeout === 'function' ? setTimeout : null);
+        var dirty = false;
+        var saveScheduled = false;
+        // Espera creciente del reintento, para que sobreviva a la recarga de la
+        // página: en un examen paginado cada pregunta recarga, y con la espera
+        // guardada en una variable del módulo nunca llegaba a crecer.
+        var retry = {failures: 0, at: 0};
 
         var last = 0;
         var pending = [];
@@ -59,16 +77,34 @@ define('local_samce/queue', [], function() {
         // como "el alumno no hizo nada" (punto 9 de la revisión externa del 23/09/2026).
         var dropped = {overflow: 0, rejected: 0};
 
-        var save = function() {
+        var write = function() {
+            dirty = false;
             if (!storage) {
                 return;
             }
             try {
                 storage.setItem(key, JSON.stringify({
-                    last: last, pending: pending, profileSent: profileSent, lost: lost, dropped: dropped
+                    last: last, pending: pending, profileSent: profileSent, lost: lost, dropped: dropped, retry: retry
                 }));
             } catch (e) {
                 // Sin almacenamiento (modo privado, cuota llena) la cola sigue funcionando en memoria.
+            }
+        };
+
+        var save = function() {
+            if (!saveDelayMs || !schedule) {
+                write();
+                return;
+            }
+            dirty = true;
+            if (!saveScheduled) {
+                saveScheduled = true;
+                schedule(function() {
+                    saveScheduled = false;
+                    if (dirty) {
+                        write();
+                    }
+                }, saveDelayMs);
             }
         };
 
@@ -86,6 +122,12 @@ define('local_samce/queue', [], function() {
                 pending = Array.isArray(state.pending) ? state.pending : [];
                 profileSent = state.profileSent === true;
                 lost = state.lost === true;
+                if (state.retry && typeof state.retry === 'object') {
+                    retry = {
+                        failures: Math.max(0, parseInt(state.retry.failures, 10) || 0),
+                        at: Math.max(0, Number(state.retry.at) || 0)
+                    };
+                }
                 if (state.dropped && typeof state.dropped === 'object') {
                     dropped = {
                         overflow: Math.max(0, parseInt(state.dropped.overflow, 10) || 0),
@@ -98,6 +140,7 @@ define('local_samce/queue', [], function() {
                 profileSent = false;
                 lost = false;
                 dropped = {overflow: 0, rejected: 0};
+                retry = {failures: 0, at: 0};
             }
         };
 
@@ -115,12 +158,29 @@ define('local_samce/queue', [], function() {
              *
              * @param {string} type
              * @param {Object} [data]
+             * @param {Object} [pushOptions]
+             * @param {boolean} [pushOptions.keep] el evento no se descarta al desbordarse la
+             *        cola mientras haya otros que sí. Es para los que pasan una sola vez por
+             *        intento y no se pueden volver a generar: el perfil del navegador, el
+             *        tamaño inicial de la ventana y la constancia del aviso. Cuando la cola
+             *        se llena se recorta por lo más viejo, que justamente es eso.
              */
-            push: function(type, data) {
-                pending.push({seq: nextSeq(), t: Math.floor(now()), type: type, data: data || {}});
-                if (pending.length > maxPending) {
-                    dropped.overflow += pending.length - maxPending;
-                    pending.splice(0, pending.length - maxPending);
+            push: function(type, data, pushOptions) {
+                var event = {seq: nextSeq(), t: Math.floor(now()), type: type, data: data || {}};
+                if (pushOptions && pushOptions.keep) {
+                    event.k = 1;
+                }
+                pending.push(event);
+                while (pending.length > maxPending) {
+                    var index = 0;
+                    for (var i = 0; i < pending.length; i++) {
+                        if (!pending[i].k) {
+                            index = i;
+                            break;
+                        }
+                    }
+                    pending.splice(index, 1);
+                    dropped.overflow += 1;
                 }
                 save();
             },
@@ -137,7 +197,7 @@ define('local_samce/queue', [], function() {
              */
             peek: function(max, maxBytes) {
                 if (!maxBytes) {
-                    return pending.slice(0, max);
+                    return pending.slice(0, max).map(plain);
                 }
                 var batch = [];
                 var bytes = 0;
@@ -147,7 +207,7 @@ define('local_samce/queue', [], function() {
                         break;
                     }
                     bytes += size;
-                    batch.push(pending[i]);
+                    batch.push(plain(pending[i]));
                 }
                 return batch;
             },
@@ -222,6 +282,23 @@ define('local_samce/queue', [], function() {
 
             clear: function() {
                 pending = [];
+                save();
+            },
+
+            /** Escribe ya lo pendiente de escribir (ver saveDelayMs). */
+            persist: function() {
+                if (dirty) {
+                    write();
+                }
+            },
+
+            /** La espera creciente del reintento: {failures, at}. */
+            getRetry: function() {
+                return {failures: retry.failures, at: retry.at};
+            },
+
+            setRetry: function(failures, at) {
+                retry = {failures: failures, at: at};
                 save();
             },
 

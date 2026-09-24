@@ -110,7 +110,7 @@ class hook_callbacks {
                 'cmid'          => $PAGE->cm ? (int) $PAGE->cm->id : 0,
                 'flushms'       => self::FLUSH_INTERVAL_MS,
                 'noticetitle'   => get_string('consentnoticetitle', 'local_samce'),
-                'noticebody'    => get_string('consentnoticebody', 'local_samce'),
+                'noticebody'    => self::notice_body(),
                 'noticeaccept'  => get_string('consentaccept', 'local_samce'),
                 'noticedecline' => get_string('consentdecline', 'local_samce'),
                 // Adonde vuelve el alumno si no acepta: la página del cuestionario.
@@ -170,9 +170,24 @@ class hook_callbacks {
             'cmid'                => (int) $PAGE->cm->id,
             'unfinishedattemptid' => $unfinished ? (int) $unfinished : 0,
             'noticetitle'         => get_string('consentnoticetitle', 'local_samce'),
-            'noticebody'          => get_string('consentnoticebody', 'local_samce'),
+            'noticebody'          => self::notice_body(),
             'noticeaccept'        => get_string('consentaccept', 'local_samce'),
             'noticedecline'       => get_string('consentdecline', 'local_samce'),
         ]]);
+    }
+
+    /**
+     * El texto del aviso, con el responsable de la base y el plazo de
+     * conservación que el administrador configuró (o, si no configuró nada, un
+     * texto que dice honestamente que todavía no están definidos).
+     */
+    private static function notice_body(): string {
+        $a = new \stdClass();
+        $controller = trim((string) get_config('local_samce', 'controllercontact'));
+        $a->controller = $controller !== '' ? $controller : get_string('controllerdefault', 'local_samce');
+        $retention = trim((string) get_config('local_samce', 'retentionnotice'));
+        $a->retention = $retention !== '' ? $retention : get_string('retentiondefault', 'local_samce');
+
+        return get_string('consentnoticebody', 'local_samce', $a);
     }
 }

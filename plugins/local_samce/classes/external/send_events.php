@@ -9,6 +9,7 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_samce\event_batch;
+use local_samce\send_policy;
 use local_samce\token_signer;
 
 /**
@@ -86,7 +87,7 @@ class send_events extends external_api {
             // viejo ni el intento de otro alumno. La vista previa de un
             // docente tampoco: no tiene sesión en el backend.
             $attempt = $DB->get_record('quiz_attempts', ['id' => $params['attemptid']],
-                'id, quiz, userid, state, preview, timefinish');
+                'id, quiz, userid, state, preview, timestart, timefinish');
             if (!$attempt || (int) $attempt->userid !== (int) $USER->id || !empty($attempt->preview)) {
                 return self::result('rejected');
             }
@@ -102,6 +103,13 @@ class send_events extends external_api {
             self::validate_context($context);
             require_capability('mod/quiz:attempt', $context);
 
+            // Sin la constancia del aviso no se acepta ningún evento. 'disabled'
+            // hace que el navegador deje de capturar y vacíe la cola: si nunca se
+            // vio el aviso, no hay monitoreo.
+            if (!accept_notice::is_accepted((int) $attempt->id)) {
+                return self::result('disabled');
+            }
+
             $dropped = 0;
             $clean = event_batch::parse($params['events'], $dropped);
             if ($dropped > 0) {
@@ -116,6 +124,21 @@ class send_events extends external_api {
                 // intento, no lo que trajo.
                 debugging('local_samce: lote de eventos inválido, se descarta entero (attemptid=' .
                     (int) $params['attemptid'] . ')', DEBUG_NORMAL);
+                return self::result('rejected');
+            }
+
+            // Tope por intento: el contenido lo arma el navegador y no se puede
+            // verificar, pero se acota cuánto puede mandar una sola sesión.
+            global $SESSION;
+            if (!isset($SESSION->local_samce_quota) || !is_array($SESSION->local_samce_quota)) {
+                $SESSION->local_samce_quota = [];
+            }
+            $quota = $SESSION->local_samce_quota[(int) $attempt->id] ?? [];
+            $within = send_policy::within_quota($quota, count($clean), strlen($params['events']), time());
+            $SESSION->local_samce_quota[(int) $attempt->id] = $quota;
+            if (!$within) {
+                debugging('local_samce: el intento superó el tope de eventos y se descarta el lote (attemptid=' .
+                    (int) $attempt->id . ')', DEBUG_NORMAL);
                 return self::result('rejected');
             }
 
@@ -139,7 +162,8 @@ class send_events extends external_api {
             // página siguiente del alumno, que necesita esa misma sesión.
             \core\session\manager::write_close();
 
-            return self::result(self::forward($eventsurl, $token, (int) $attempt->id));
+            return self::result(self::forward($eventsurl, $token, (int) $attempt->id,
+                time() - (int) $attempt->timestart));
         } catch (\Throwable $e) {
             debugging('local_samce: fallo al procesar los eventos de interacción: ' . $e->getMessage(), DEBUG_NORMAL);
             return self::result('rejected');
@@ -168,7 +192,7 @@ class send_events extends external_api {
      * Manda el lote firmado al backend, con timeouts cortos, y traduce la
      * respuesta a un estado para el cliente.
      */
-    private static function forward(string $eventsurl, string $token, int $attemptid): string {
+    private static function forward(string $eventsurl, string $token, int $attemptid, int $attemptage): string {
         global $CFG;
 
         require_once($CFG->libdir . '/filelib.php');
@@ -183,16 +207,10 @@ class send_events extends external_api {
             return 'retry';
         }
 
-        $info = $curl->get_info();
-        $code = (int) ($info['http_code'] ?? 0);
-        if ($code === 200) {
-            return 'ok';
-        }
-        // Una falla del lado del backend, o un límite de frecuencia, puede
-        // resolverse sola: se conserva el lote. Cualquier otro rechazo (firma,
-        // formato, intento sin sesión) no cambia reintentando: se descarta.
-        if ($code === 0 || $code === 429 || $code >= 500) {
-            return 'retry';
+        $code = (int) ($curl->get_info()['http_code'] ?? 0);
+        $status = send_policy::status_for_http_code($code, $attemptage);
+        if ($status !== 'rejected') {
+            return $status;
         }
 
         // Un rechazo definitivo del backend (firma, formato, un tipo de evento
