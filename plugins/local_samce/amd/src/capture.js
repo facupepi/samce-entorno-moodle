@@ -221,8 +221,12 @@ define('local_samce/capture', [
                         return;
                     }
 
-                    // 'ok', o 'rejected' (que no mejora reintentando): el lote sale de la cola.
-                    queue.drop(batch.length);
+                    // 'ok', o 'rejected' (que no mejora reintentando): el lote sale de la
+                    // cola. Por seq y no por cantidad, para que confirmar sea idempotente
+                    // aunque se superponga con otro vaciado (ver el comentario de dropUpTo).
+                    if (batch.length > 0) {
+                        queue.dropUpTo(batch[batch.length - 1].seq);
+                    }
                     if (queue.isLost()) {
                         queue.setLost(false);
                         env.emit('connection', {online: true, source: 'send'});
