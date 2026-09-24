@@ -163,7 +163,9 @@ define('local_samce/capture', [
          *
          * @param {Object} [flushOptions]
          * @param {boolean} [flushOptions.force] ignora la espera de un reintento.
-         * @param {boolean} [flushOptions.keepalive] la página se está cerrando.
+         * @param {boolean} [flushOptions.keepalive] la página se está cerrando u ocultando.
+         * @param {boolean} [flushOptions.unloading] la página se está yendo de
+         *        verdad (pagehide), a diferencia de solo ocultarse (puede volver).
          * @return {Promise}
          */
         var flush = function(flushOptions) {
@@ -175,7 +177,7 @@ define('local_samce/capture', [
             // Con la página cerrándose u ocultándose, los detectores informan ya
             // lo que tienen acumulado (por ejemplo, el tiempo de cada pregunta).
             signals.forEach(function(signal) {
-                safe(signal.flush)({final: !!flushOptions.keepalive});
+                safe(signal.flush)({final: !!flushOptions.keepalive, unloading: !!flushOptions.unloading});
             });
 
             // El vaciado final sale aunque haya un envío en curso: la página se
@@ -246,7 +248,7 @@ define('local_samce/capture', [
         }), options.flushMs || DEFAULT_FLUSH_MS);
 
         var onPageHide = safe(function() {
-            flush({force: true, keepalive: true});
+            flush({force: true, keepalive: true, unloading: true});
         });
         var onVisibility = safe(function() {
             if (doc.hidden) {
