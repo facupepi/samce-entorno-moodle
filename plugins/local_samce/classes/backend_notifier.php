@@ -22,11 +22,25 @@ class backend_notifier {
      * una tarea en segundo plano), así que se mantiene corta a propósito. */
     const EVENT_TOKEN_TTL_SECONDS = 60;
 
-    /** Segundos que se espera para conectar con el backend. */
-    const REQUEST_CONNECT_TIMEOUT_SECONDS = 2;
+    /**
+     * Tiempos de espera del envío desde el observer, que corre DENTRO del
+     * request del alumno (abrir o entregar el examen): un backend que acepta la
+     * conexión y no contesta lo dejaría esperando y con el proceso PHP del
+     * campus ocupado. Son cortos a propósito (800 ms en total): si no alcanzan,
+     * el aviso se reintenta más tarde con una tarea en segundo plano, así que
+     * perder este envío no pierde el aviso. Ninguna falla del monitoreo puede
+     * demorar el examen.
+     */
+    const REQUEST_CONNECT_TIMEOUT_MS = 500;
+    const REQUEST_TIMEOUT_MS = 800;
 
-    /** Segundos que se espera, en total, por la respuesta del backend. */
-    const REQUEST_TIMEOUT_SECONDS = 3;
+    /**
+     * Tiempos de espera del reintento desde la tarea en segundo plano
+     * (classes/task/retry_exam_event.php): ahí no hay ningún alumno esperando,
+     * así que se puede ser más paciente con un backend lento.
+     */
+    const BACKGROUND_CONNECT_TIMEOUT_MS = 2000;
+    const BACKGROUND_TIMEOUT_MS = 5000;
 
     /**
      * Firma y manda un aviso de examen. No lanza ninguna excepción: informa
@@ -38,10 +52,11 @@ class backend_notifier {
      *                        con la hora de este intento puntual).
      * @param string $secret Secreto compartido con MOODLE_LAUNCH_SECRET.
      * @param string $backendurl URL de samce-backend que recibe el aviso.
+     * @param bool $background true desde la tarea en segundo plano: espera más.
      * @return bool true si el backend lo aceptó (sin error de red y con un
      *              código HTTP menor a 400).
      */
-    public static function send_exam_event(array $claims, string $secret, string $backendurl): bool {
+    public static function send_exam_event(array $claims, string $secret, string $backendurl, bool $background = false): bool {
         global $CFG;
 
         $now = time();
@@ -52,14 +67,11 @@ class backend_notifier {
         require_once($CFG->libdir . '/filelib.php');
         $curl = new \curl();
         $curl->setHeader('Content-Type: application/json');
-        // Con timeouts propios: sin ellos el POST espera hasta 30 segundos
-        // para conectar y no tiene límite total de respuesta, y como el
-        // aviso de inicio sale mientras el alumno abre el examen, un
-        // backend que acepta la conexión y no contesta lo dejaría
-        // esperando. Ninguna falla del monitoreo puede demorar el examen.
+        // Con timeouts propios (ver las constantes): sin ellos el POST espera
+        // hasta 30 segundos para conectar y no tiene límite total de respuesta.
         $curl->post($backendurl, json_encode(['token' => $token]), [
-            'CURLOPT_CONNECTTIMEOUT' => self::REQUEST_CONNECT_TIMEOUT_SECONDS,
-            'CURLOPT_TIMEOUT'        => self::REQUEST_TIMEOUT_SECONDS,
+            'CURLOPT_CONNECTTIMEOUT_MS' => $background ? self::BACKGROUND_CONNECT_TIMEOUT_MS : self::REQUEST_CONNECT_TIMEOUT_MS,
+            'CURLOPT_TIMEOUT_MS'        => $background ? self::BACKGROUND_TIMEOUT_MS : self::REQUEST_TIMEOUT_MS,
         ]);
 
         // get_errno() solo ve fallas de red (no conectó, timeout): un 404 o

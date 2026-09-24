@@ -111,10 +111,48 @@ class event_batch_test extends \PHPUnit\Framework\TestCase {
         $this->assertNull(event_batch::parse('[{"seq":1,"t":1790000000000,"type":"focus_lost","data":[1,2]}]'));
     }
 
-    public function test_oversized_data_is_rejected(): void {
+    public function test_a_batch_with_only_an_oversized_event_ends_up_empty_and_is_rejected(): void {
         $big = ['x' => str_repeat('a', event_batch::MAX_DATA_BYTES)];
 
         $this->assertNull(event_batch::parse($this->batch([$this->event(['data' => $big])])));
+    }
+
+    // Punto 26: un evento con el data demasiado grande se descarta él solo, sin
+    // tirar los eventos limpios que van al lado.
+    public function test_an_oversized_event_is_dropped_alone(): void {
+        $big = ['x' => str_repeat('a', event_batch::MAX_DATA_BYTES)];
+        $dropped = 0;
+
+        $clean = event_batch::parse($this->batch([
+            $this->event(['seq' => 1]),
+            $this->event(['seq' => 2, 'data' => $big]),
+            $this->event(['seq' => 3]),
+        ]), $dropped);
+
+        $this->assertCount(2, $clean);
+        $this->assertSame([1, 3], [$clean[0]['seq'], $clean[1]['seq']]);
+        $this->assertSame(1, $dropped);
+    }
+
+    public function test_an_invalid_qtype_is_trimmed_from_the_event_not_the_batch(): void {
+        $clean = event_batch::parse($this->batch([
+            $this->event(['seq' => 1, 'type' => 'key_activity', 'data' => ['slot' => 2, 'qtype' => str_repeat('a', 1900), 'inserts' => 4]]),
+            $this->event(['seq' => 2, 'type' => 'clipboard', 'data' => ['slot' => 'uno', 'qtype' => 'essay', 'length' => 9]]),
+            $this->event(['seq' => 3, 'type' => 'key_activity', 'data' => ['slot' => 1, 'qtype' => 'essay']]),
+        ]));
+
+        $this->assertCount(3, $clean);
+        $this->assertFalse(isset($clean[0]['data']->qtype), 'el qtype enorme se saca');
+        $this->assertSame(2, $clean[0]['data']->slot);
+        $this->assertSame(4, $clean[0]['data']->inserts, 'el resto del evento queda');
+        $this->assertFalse(isset($clean[1]['data']->slot), 'un slot que no es entero se saca');
+        $this->assertSame('essay', $clean[1]['data']->qtype);
+        $this->assertSame('essay', $clean[2]['data']->qtype);
+    }
+
+    public function test_a_broken_envelope_still_rejects_the_whole_batch(): void {
+        $this->assertNull(event_batch::parse($this->batch([$this->event(), $this->event(['seq' => 2, 'type' => 'keylogger'])])));
+        $this->assertNull(event_batch::parse($this->batch([$this->event(), $this->event(['seq' => 0])])));
     }
 
     // Punto 22 de la revisión externa: el tope de la suma tiene que ser el mismo
