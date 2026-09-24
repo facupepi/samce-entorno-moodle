@@ -99,6 +99,13 @@ class send_events extends external_api {
 
             $clean = event_batch::parse($params['events']);
             if ($clean === null) {
+                // Hasta ahora este descarte era mudo (punto 20 de la revisión
+                // externa del 23/09/2026): el lote entero se pierde, y del
+                // lado del backend nunca llega a verse. El navegador del
+                // alumno controla este contenido, así que solo se registra el
+                // intento, no lo que trajo.
+                debugging('local_samce: lote de eventos inválido, se descarta entero (attemptid=' .
+                    (int) $params['attemptid'] . ')', DEBUG_NORMAL);
                 return self::result('rejected');
             }
 
@@ -116,7 +123,7 @@ class send_events extends external_api {
             // página siguiente del alumno, que necesita esa misma sesión.
             \core\session\manager::write_close();
 
-            return self::result(self::forward($eventsurl, $token));
+            return self::result(self::forward($eventsurl, $token, (int) $attempt->id));
         } catch (\Throwable $e) {
             debugging('local_samce: fallo al procesar los eventos de interacción: ' . $e->getMessage(), DEBUG_NORMAL);
             return self::result('rejected');
@@ -145,7 +152,7 @@ class send_events extends external_api {
      * Manda el lote firmado al backend, con timeouts cortos, y traduce la
      * respuesta a un estado para el cliente.
      */
-    private static function forward(string $eventsurl, string $token): string {
+    private static function forward(string $eventsurl, string $token, int $attemptid): string {
         global $CFG;
 
         require_once($CFG->libdir . '/filelib.php');
@@ -172,6 +179,12 @@ class send_events extends external_api {
             return 'retry';
         }
 
+        // Un rechazo definitivo del backend (firma, formato, un tipo de evento
+        // que el plugin y el backend no comparten, un intento sin sesión) borra
+        // el lote en el cliente. Hasta ahora no quedaba ni una línea del lado de
+        // Moodle (punto 20 de la revisión externa del 23/09/2026).
+        debugging('local_samce: el backend rechazó un lote de eventos (HTTP ' . $code .
+            ', attemptid=' . $attemptid . '), se descarta', DEBUG_NORMAL);
         return 'rejected';
     }
 
