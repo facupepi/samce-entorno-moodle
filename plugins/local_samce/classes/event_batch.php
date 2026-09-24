@@ -27,6 +27,18 @@ class event_batch {
     /** Máximo de bytes del data de un solo evento, ya serializado. */
     const MAX_DATA_BYTES = 2048;
 
+    /**
+     * Rango válido de `t`, el mismo que aplica el backend
+     * (handlers/interaction_events.go): el de una columna TIMESTAMP(3) de
+     * MySQL, con margen antes del límite exacto (2038-01-19 03:14:07 UTC).
+     * Sin este tope, un evento con la hora corrupta pasaba esta validación,
+     * el backend lo rechazaba recién al insertarlo, y como send_events.php
+     * trata un 500 como reintentable, ese evento bloqueaba la cola del
+     * alumno para siempre (el reintento siempre arranca desde el frente).
+     */
+    const MIN_EVENT_TIMESTAMP_MS = 1000;
+    const MAX_EVENT_TIMESTAMP_MS = 2145916800000; // 2038-01-01 00:00:00 UTC.
+
     /** Tipos de evento que acepta el backend. */
     const ALLOWED_TYPES = [
         'client_profile',
@@ -74,7 +86,8 @@ class event_batch {
             $seq = $event->seq ?? null;
             $time = $event->t ?? null;
             $type = $event->type ?? null;
-            if (!is_int($seq) || $seq <= 0 || !is_int($time) || $time <= 0) {
+            if (!is_int($seq) || $seq <= 0 || !is_int($time)
+                    || $time < self::MIN_EVENT_TIMESTAMP_MS || $time > self::MAX_EVENT_TIMESTAMP_MS) {
                 return null;
             }
             if (!is_string($type) || !in_array($type, self::ALLOWED_TYPES, true)) {
