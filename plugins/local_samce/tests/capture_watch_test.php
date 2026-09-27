@@ -39,6 +39,14 @@ class capture_watch_test extends \PHPUnit\Framework\TestCase {
         $this->assertTrue(capture_watch::missed(self::NOW - 120, self::NOW - 600, self::NOW));
     }
 
+    // seen === delivered: la captura arrancó en el mismo instante en que se
+    // entregó la página. Se decide a propósito como "no perdido" (revisión del
+    // 25/09/2026, punto de cobertura de tests): un empate exacto es la captura
+    // arrancando a tiempo, no llegando tarde.
+    public function test_capture_starting_at_the_exact_moment_the_page_was_delivered_is_not_missed(): void {
+        $this->assertFalse(capture_watch::missed(self::NOW - 120, self::NOW - 120, self::NOW));
+    }
+
     public function test_the_grace_boundary(): void {
         $this->assertFalse(capture_watch::missed(self::NOW - capture_watch::START_GRACE_SECONDS + 1, null, self::NOW));
         $this->assertTrue(capture_watch::missed(self::NOW - capture_watch::START_GRACE_SECONDS, null, self::NOW));
