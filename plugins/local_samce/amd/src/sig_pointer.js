@@ -37,6 +37,18 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
 
     var SAMPLE_MS = 250;
     var IDLE_MS = 15000;
+    /**
+     * Latido mientras el mouse sigue quieto: sin esto, el aviso de inactividad
+     * salía UNA sola vez y después nada, así que diez minutos sin mover el mouse
+     * en la pantalla de repaso (mod-quiz-summary, sin preguntas y por lo tanto
+     * sin el latido de question_time) se veían igual que un silencio real y
+     * activaban la marca "Sin señales" del panel sobre el comportamiento más
+     * prudente que puede tener un alumno: repasar antes de entregar (revisión
+     * externa del 25/09/2026, punto 4.1). Se repite cada minuto, no depende de
+     * que haya ninguna pregunta visible, y no agrega ningún pedido de red nuevo:
+     * viaja en el próximo vaciado que de todas formas ya iba a correr.
+     */
+    var IDLE_REPEAT_MS = 60000;
     var TICK_MS = 1000;
     /** Tiempo mínimo, por pregunta y por ventana, para que valga la pena informarlo. */
     var MIN_DWELL_MS = 500;
@@ -77,7 +89,7 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
         // 24/09/2026, punto 3.2).
         var longestGap = 0;
         var gapBefore = null;
-        var idleReported = false;
+        var lastIdleEmitAt = null;
 
         var onMove = env.safe(function() {
             var now = env.now();
@@ -91,7 +103,7 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
             longestGap = Math.max(longestGap, now - Math.max(lastMoveAt, lastFlushAt));
             lastMoveAt = now;
             hasMoved = true;
-            idleReported = false;
+            lastIdleEmitAt = null;
             moves += 1;
         });
 
@@ -186,9 +198,10 @@ define('local_samce/sig_pointer', ['local_samce/question_context'], function(Que
                         data.gap_before_ms = gapBefore;
                     }
                     env.emit('mouse_activity', data);
-                } else if (!idleReported && now - lastMoveAt >= IDLE_MS) {
+                } else if (now - lastMoveAt >= IDLE_MS &&
+                        (lastIdleEmitAt === null || now - lastIdleEmitAt >= IDLE_REPEAT_MS)) {
                     env.emit('mouse_activity', {moves: 0, idle_ms: now - lastMoveAt, window_ms: windowMs});
-                    idleReported = true;
+                    lastIdleEmitAt = now;
                 }
                 moves = 0;
                 longestGap = 0;

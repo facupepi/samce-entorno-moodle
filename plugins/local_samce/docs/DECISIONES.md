@@ -109,3 +109,19 @@ falla, y falsificable igual). En cambio se detecta y se le marca al docente:
   y el backend además marca las sesiones sin eventos o con un silencio de 10 minutos o
   más. El panel muestra "Sin captura". Es una señal y no una prueba.
 - Sin ningún pedido periódico: no hay latido.
+
+## El latido de "sigo acá" no depende de que haya preguntas visibles
+
+En la página del intento, `question_time` funciona como latido: mientras haya una
+pregunta a la vista, emite al menos un evento por minuto (`MAX_HOLD_MS`), y eso es
+lo que evita que el backend marque "Sin señales" a un alumno que está pensando.
+Pero `mod-quiz-summary` (la pantalla de repaso antes de entregar) no tiene
+preguntas, y antes el único aviso posible ahí era el de mouse quieto, que salía
+una sola vez y no se repetía. Un alumno que repasa diez minutos sin tocar el
+mouse —el comportamiento más prudente que puede tener— quedaba con la misma
+marca que un silencio real (revisión externa del 25/09/2026, punto 4.1).
+
+Se corrigió repitiendo el aviso de mouse quieto cada minuto mientras siga sin
+moverse, en vez de una sola vez. No depende de que haya preguntas y cubre las dos
+páginas por igual, sin agregar ningún pedido de red nuevo: viaja en el próximo
+vaciado que de todas formas ya iba a salir.
