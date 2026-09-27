@@ -46,6 +46,25 @@ class gate_policy_test extends \PHPUnit\Framework\TestCase {
             gate_policy::verdict('start', true, true, false, $old, false, self::NOW));
     }
 
+    // El borde exacto de START_AUTH_SECONDS: justo en el límite todavía vale, un
+    // segundo más allá ya no (revisión del 25/09/2026, punto de cobertura de tests).
+    public function test_authorization_at_the_exact_boundary_of_start_auth_seconds(): void {
+        $atlimit = self::NOW - gate_policy::START_AUTH_SECONDS;
+        $this->assertSame(gate_policy::ALLOW,
+            gate_policy::verdict('start', true, true, false, $atlimit, false, self::NOW), 'justo en el límite, todavía vale');
+
+        $onesecondover = $atlimit - 1;
+        $this->assertSame(gate_policy::NOTICE,
+            gate_policy::verdict('start', true, true, false, $onesecondover, false, self::NOW), 'un segundo más allá, ya no');
+    }
+
+    // Una autorización "del futuro" (reloj desincronizado, o dato manipulado) no
+    // cuenta como reciente para comenzar un intento nuevo.
+    public function test_a_future_authorization_does_not_let_a_new_attempt_start(): void {
+        $this->assertSame(gate_policy::NOTICE,
+            gate_policy::verdict('start', true, true, false, self::NOW + 60, false, self::NOW));
+    }
+
     public function test_resuming_an_attempt_that_already_has_the_notice_does_not_ask_again(): void {
         $this->assertSame(gate_policy::ALLOW,
             gate_policy::verdict('start', true, true, false, null, true, self::NOW));
