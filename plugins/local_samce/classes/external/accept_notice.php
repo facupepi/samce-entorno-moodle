@@ -95,9 +95,11 @@ class accept_notice extends external_api {
             self::validate_context($context);
             require_capability('mod/quiz:attempt', $context);
 
-            // Cada vez que la captura arranca en una página del intento, se anota: es lo que
-            // permite saber que la página no corrió sin captura (capture_watch).
-            set_user_preference(\local_samce\capture_watch::SEEN_PREFIX . (int) $attempt->id, time());
+            // La marca de "la captura arrancó de verdad" (capture_watch::SEEN_PREFIX) NO
+            // se pone acá: este método solo prueba que el alumno aceptó el aviso, no que
+            // Capture.init() siguió corriendo después sin crashear. Se pone en
+            // send_events.php, cuando efectivamente llega un lote de eventos de este
+            // intento (revisión externa del 28/09/2026, punto 3).
 
             $name = self::PREFERENCE_PREFIX . (int) $attempt->id;
             // La primera hora es la que vale: un reenvío no la pisa.

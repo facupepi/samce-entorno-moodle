@@ -149,3 +149,34 @@ para siempre (revisión externa del 28/09/2026, punto 8). Se limpian con
 Moodle que corre ANTES de que `quiz_delete_instance()` borre los intentos —
 tiene que ser ése y no un observer de `course_module_deleted`, que se dispara
 después, cuando ya no queda de dónde leer los intentos del cuestionario.
+
+## "Vio el aviso" no es lo mismo que "la captura arrancó"
+
+La constancia de que el alumno vio el aviso (`accept_notice`) y la marca de que
+la captura realmente arrancó en una página (`capture_watch::SEEN_PREFIX`) son
+dos hechos distintos. Antes el servidor anotaba el segundo en el mismo request
+que registraba el primero, sin condición: si `Capture.init()` arrancaba después
+y tiraba una excepción (una extensión que bloquea `sessionStorage` o
+`MutationObserver` dentro de un iframe de editor, por ejemplo), el servidor ya
+daba la sesión por "con captura" sin que llegara un solo evento (revisión
+externa del 28/09/2026, punto 3).
+
+Se corrigió moviendo esa marca a `send_events.php`, cuando efectivamente llega
+un lote de eventos de ese intento: `capture.js` ya manda uno apenas arranca
+(`flush({force: true})`), así que si la captura corrió de verdad, llega a los
+pocos segundos por el mismo camino que ya existe. No agrega ningún pedido de
+red nuevo.
+
+## Una respuesta de red vieja no pisa el estado que dejó una más nueva
+
+El vaciado periódico y el de "la página se está yendo de verdad" (keepalive)
+pueden estar en vuelo al mismo tiempo a propósito, para no perder lo acumulado
+al cerrar. Si el más nuevo respondía primero con éxito y el más viejo, que
+venía colgado por una red lenta, respondía después con una falla, esa
+respuesta tardía pisaba el estado de reintento (`failures`, `retryAt`,
+`isLost`) que el más nuevo acababa de confirmar bueno (revisión externa del
+28/09/2026, punto 6). Se corrigió guardando cuándo arrancó cada envío: importa
+cuál arrancó último, no cuál termina último. Lo que confirma el servidor sobre
+qué eventos recibió (`dropUpTo`) se sigue aplicando siempre, venga de la
+respuesta que venga: es un hecho sobre ese envío puntual, no un estado
+compartido.
