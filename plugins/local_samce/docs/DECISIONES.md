@@ -125,3 +125,27 @@ Se corrigió repitiendo el aviso de mouse quieto cada minuto mientras siga sin
 moverse, en vez de una sola vez. No depende de que haya preguntas y cubre las dos
 páginas por igual, sin agregar ningún pedido de red nuevo: viaja en el próximo
 vaciado que de todas formas ya iba a salir.
+
+## `backendurl` rechaza una URL mal formada al guardarse
+
+El ajuste solo exigía una URL sintácticamente válida (`PARAM_URL`), pero
+`event_batch::events_url()` necesita que termine exactamente en
+`/sessions/moodle-event`. Un typo, una barra de más o cualquier otro desvío
+hacía que `events_url()` devolviera `''`, y eso apaga TODO el monitoreo —aviso,
+captura, puerta del servidor, avisos de captura— en silencio: la casilla
+`capture_enabled` sigue tildada y no queda ningún error visible (revisión
+externa del 28/09/2026, punto 1). El ajuste ahora rechaza guardarse si no tiene
+esa forma exacta (`classes/admin_setting_backendurl.php`), con un mensaje
+explícito. Vacío sigue siendo válido: es el valor por defecto.
+
+## Las preferencias del complemento se limpian al borrar un cuestionario
+
+`mdl_user_preferences` no tiene columna de curso ni de cuestionario, así que
+borrar un curso (o solo el cuestionario) no tocaba las marcas que el
+complemento deja por intento (aviso visto, página entregada, captura vista,
+alertas) ni la autorización de comienzo por cuestionario: quedaban huérfanas
+para siempre (revisión externa del 28/09/2026, punto 8). Se limpian con
+`local_samce_pre_course_module_delete` (`lib.php`), un callback legado de
+Moodle que corre ANTES de que `quiz_delete_instance()` borre los intentos —
+tiene que ser ése y no un observer de `course_module_deleted`, que se dispara
+después, cuando ya no queda de dónde leer los intentos del cuestionario.

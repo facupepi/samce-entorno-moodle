@@ -26,7 +26,7 @@ if ($hassiteconfig) {
         PARAM_URL
     ));
 
-    $settings->add(new admin_setting_configtext(
+    $settings->add(new \local_samce\admin_setting_backendurl(
         'local_samce/backendurl',
         get_string('backendurl', 'local_samce'),
         get_string('backendurl_desc', 'local_samce'),

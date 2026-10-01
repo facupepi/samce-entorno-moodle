@@ -5,7 +5,8 @@
  * El movimiento del mouse no se registra punto a punto (saturaría el envío y
  * degradaría el examen, riesgo R7): se muestrea a lo sumo cada 250 ms y se
  * agrega por ventana, con la cantidad de movimientos y la pausa más larga.
- * Si el mouse queda quieto un rato largo se avisa una sola vez.
+ * Si el mouse queda quieto un rato largo se avisa, y mientras siga sin
+ * moverse se repite cada minuto (ver IDLE_REPEAT_MS más abajo).
  *
  * "El cursor sale de la ventana" indica que el puntero se fue a otro monitor
  * o a otra aplicación, y complementa la pérdida de foco.
