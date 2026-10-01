@@ -140,6 +140,14 @@ define('local_samce/capture', [
         var savedRetry = queue.getRetry();
         var failures = savedRetry.failures;
         var retryAt = savedRetry.at;
+        // El envío periódico y el de "la página se está yendo de verdad"
+        // (keepalive) pueden estar en vuelo al mismo tiempo a propósito (ver más
+        // abajo). Si el más nuevo responde primero —éxito, resetea failures y
+        // retryAt— y el más viejo, que venía colgado por una red lenta, responde
+        // después con una falla, esa respuesta tardía no tiene que pisar un
+        // estado que ya se confirmó bueno: importa cuál arrancó último, no cuál
+        // termina último (revisión externa del 28/09/2026, punto 6).
+        var newestStartedAt = 0;
         // Cambiar de pregunta en un cuestionario paginado dispara
         // visibilitychange a oculto y pagehide casi juntos, y los dos
         // vacían con keepalive (a propósito: no esperan a que termine
@@ -310,12 +318,21 @@ define('local_samce/capture', [
 
             var sendNext = function() {
                 var batch = queue.peek(flushOptions.keepalive ? UNLOAD_BATCH_SIZE : (splitLimit || BATCH_SIZE), BATCH_MAX_BYTES);
+                var sendStartedAt = now();
+                newestStartedAt = Math.max(newestStartedAt, sendStartedAt);
                 // Cualquier falla del envío, incluso una que lance de forma síncrona, es un reintento.
                 return Promise.resolve().then(function() {
                     return options.transport.send(attemptId, batch, {keepalive: !!flushOptions.keepalive, contextId: contextId});
                 }).catch(function() {
                     return 'retry';
                 }).then(function(status) {
+                    // Esta respuesta arrancó antes que la más nueva en vuelo (o ya
+                    // resuelta): no puede pisar failures/retryAt/isLost con lo que diga.
+                    // Lo que SÍ se aplica siempre, venga de la que venga: confirmar qué
+                    // seq's el servidor dijo que recibió (dropUpTo), porque eso es un
+                    // hecho sobre ESE envío puntual y no un estado compartido.
+                    var stale = sendStartedAt < newestStartedAt;
+
                     if (status === 'disabled') {
                         // La captura está apagada o mal configurada: se deja de capturar.
                         queue.clear();
@@ -323,19 +340,21 @@ define('local_samce/capture', [
                         return;
                     }
                     if (status === 'retry') {
-                        failures += 1;
-                        // El navegador no siempre avisa que se cortó la conexión
-                        // (no dispara "offline" si queda otra interfaz de red o si
-                        // lo que se perdió es internet): se deduce de los envíos.
-                        if (failures >= LOST_AFTER_FAILURES && !queue.isLost()) {
-                            queue.setLost(true);
-                            env.emit('connection', {online: false, source: 'send'});
+                        if (!stale) {
+                            failures += 1;
+                            // El navegador no siempre avisa que se cortó la conexión
+                            // (no dispara "offline" si queda otra interfaz de red o si
+                            // lo que se perdió es internet): se deduce de los envíos.
+                            if (failures >= LOST_AFTER_FAILURES && !queue.isLost()) {
+                                queue.setLost(true);
+                                env.emit('connection', {online: false, source: 'send'});
+                            }
+                            // +-25 % al azar: sin él, todos los alumnos que fallaron a la
+                            // vez reintentaban a la vez, siempre con el mismo intervalo.
+                            var backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
+                            retryAt = now() + Math.round(backoff * (0.75 + random() * 0.5));
+                            queue.setRetry(failures, retryAt);
                         }
-                        // +-25 % al azar: sin él, todos los alumnos que fallaron a la
-                        // vez reintentaban a la vez, siempre con el mismo intervalo.
-                        var backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * Math.pow(2, failures - 1));
-                        retryAt = now() + Math.round(backoff * (0.75 + random() * 0.5));
-                        queue.setRetry(failures, retryAt);
                         return;
                     }
 
@@ -368,13 +387,15 @@ define('local_samce/capture', [
                             queue.noteDropped('rejected', batch.length);
                         }
                     }
-                    if (queue.isLost()) {
-                        queue.setLost(false);
-                        env.emit('connection', {online: true, source: 'send'});
+                    if (!stale) {
+                        if (queue.isLost()) {
+                            queue.setLost(false);
+                            env.emit('connection', {online: true, source: 'send'});
+                        }
+                        failures = 0;
+                        retryAt = 0;
+                        queue.setRetry(0, 0);
                     }
-                    failures = 0;
-                    retryAt = 0;
-                    queue.setRetry(0, 0);
                     if (queue.size() === 0) {
                         splitLimit = null;
                     }

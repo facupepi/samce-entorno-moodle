@@ -110,6 +110,17 @@ class send_events extends external_api {
                 return self::result('disabled');
             }
 
+            // Se anota ACÁ, al llegar un lote real, y no en accept_notice::execute()
+            // (que solo prueba que el alumno aceptó el aviso): si Capture.init()
+            // arrancaba y tiraba una excepción después —una extensión que bloquea
+            // sessionStorage o MutationObserver dentro de un iframe de editor, por
+            // ejemplo— nunca llegaba un evento, pero el servidor ya daba la sesión
+            // por "con captura" porque la constancia del aviso ya estaba. capture.js
+            // hace flush({force: true}) apenas arranca, así que si la captura corrió
+            // de verdad, esto llega a los pocos segundos de la página (revisión
+            // externa del 28/09/2026, punto 3).
+            set_user_preference(\local_samce\capture_watch::SEEN_PREFIX . (int) $attempt->id, time());
+
             $dropped = 0;
             $clean = event_batch::parse($params['events'], $dropped);
             if ($dropped > 0) {
