@@ -20,6 +20,7 @@ $string['missingpanelurl'] = 'The local_samce teacher panel URL has not been con
 $string['nocoursesavailable'] = 'There is no course where you have a teaching role with access to the SAMCE panel.';
 $string['backendurl'] = 'Backend events URL';
 $string['backendurl_desc'] = 'Full URL of the samce-backend endpoint that receives exam attempt events (POST /sessions/moodle-event). Used server-to-server, never seen by the student. The URL of the interaction events endpoint (POST /sessions/moodle-events) is derived from this one, so it must end in /sessions/moodle-event.';
+$string['backendurlinvalid'] = 'This URL will not work: it must end exactly in /sessions/moodle-event (at most one trailing slash). With any other shape, monitoring is silently disabled altogether.';
 $string['captureenabled'] = 'Capture student interaction events';
 $string['captureenabled_desc'] = 'When enabled, technical signals of the student\'s interaction are recorded during an exam attempt (focus changes, typing cadence without content, mouse movement, clipboard, fullscreen and window size) and sent to SAMCE. When disabled, no event is recorded or sent.';
 $string['consentnoticetitle'] = 'Monitoring notice for this exam';

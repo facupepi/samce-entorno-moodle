@@ -36,6 +36,43 @@ function local_samce_extend_navigation_course(navigation_node $navigation, stdCl
 }
 
 /**
+ * Antes de borrar un cuestionario (incluido cuando se borra el curso entero:
+ * Moodle borra cada módulo por este mismo camino) limpia las preferencias de
+ * usuario del complemento atadas a sus intentos, que si no quedan huérfanas
+ * para siempre (revisión externa del 28/09/2026, punto 8).
+ *
+ * Tiene que ser `pre_course_module_delete` y no un observer de
+ * `course_module_deleted`: para cuando ese evento se dispara,
+ * `quiz_delete_instance()` ya borró `quiz_attempts`, así que no quedaría de
+ * dónde sacar los intentos del cuestionario. Moodle llama a esta función
+ * automáticamente por convención de nombre, antes de borrar la instancia.
+ *
+ * No puede fallar la eliminación del cuestionario: cualquier error se
+ * registra y se sigue de largo.
+ *
+ * @param stdClass $cm El course_module que se va a borrar.
+ */
+function local_samce_pre_course_module_delete(stdClass $cm) {
+    global $DB;
+
+    if (empty($cm->modname) || $cm->modname !== 'quiz' || empty($cm->instance)) {
+        return;
+    }
+
+    try {
+        $attemptids = array_map('intval',
+            $DB->get_fieldset_select('quiz_attempts', 'id', 'quiz = ?', [$cm->instance]));
+        $names = \local_samce\preference_cleanup::names_for_quiz((int) $cm->id, $attemptids);
+
+        list($insql, $params) = $DB->get_in_or_equal($names);
+        $DB->delete_records_select('user_preferences', "name $insql", $params);
+    } catch (\Throwable $e) {
+        debugging('local_samce: no se pudieron limpiar las preferencias del cuestionario borrado: ' .
+            $e->getMessage(), DEBUG_NORMAL);
+    }
+}
+
+/**
  * Agrega el link al panel general SAMCE (todos los cursos donde el usuario
  * tiene local/samce:viewpanel) a la navegación global, para que el docente
  * pueda acceder sin depender de estar parado en un curso puntual. Moodle
