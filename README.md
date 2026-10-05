@@ -110,11 +110,12 @@ llega por el menú tras iniciar sesión, o directamente:
 
 - Curso SI2-2026: http://localhost:8000/course/view.php?id=2
 - Evaluación *Primer Parcial*: http://localhost:8000/mod/quiz/view.php?id=3
-- Página del intento, donde después va la captura: `/mod/quiz/attempt.php`
+- Página del intento, donde corre la captura: `/mod/quiz/attempt.php`
 
 Con el complemento configurado, el docente además tiene dos accesos al panel:
 *Panel de supervisión SAMCE* dentro de cada curso, y *Panel SAMCE (todos mis
-cursos)* en el menú general.
+cursos)* en el menú general. Y con la captura encendida, el alumno ve el aviso
+de privacidad antes de comenzar y el indicador de monitoreo mientras rinde.
 
 ---
 
