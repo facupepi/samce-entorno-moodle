@@ -46,6 +46,8 @@ define('local_samce/sig_focus', [], function() {
         var focused = doc.hasFocus();
         var focusLostAt = null;
         var hiddenAt = null;
+        // La página ya está yéndose (pagehide). Ver onVisibility.
+        var leaving = false;
 
         // Compara el foco real con el que se tenía anotado y informa el cambio.
         // Si la página arrancó sin foco, no inventa una pérdida: el primer
@@ -72,8 +74,19 @@ define('local_samce/sig_focus', [], function() {
             win.setTimeout(check, 0);
         });
 
+        // Al navegar a otra página, el navegador dispara pagehide con la página
+        // todavía visible y DESPUÉS visibilitychange a oculto (medido en Chromium:
+        // beforeunload, pagehide, visibilitychange, unload). Ese "oculto" es la
+        // página descargándose, no el alumno saliendo: no hay a quién avisarle
+        // que "volvió", porque la página que lo habría visto ya no existe. Si se
+        // informara, cada cambio de pregunta dejaría un visibility_hidden sin su
+        // visibility_visible, y el análisis lo leería como una salida que dura
+        // hasta el final de la sesión.
         var onVisibility = env.safe(function() {
             if (doc.hidden) {
+                if (leaving) {
+                    return;
+                }
                 if (hiddenAt === null) {
                     hiddenAt = env.now();
                     env.emit('visibility_hidden', {});
@@ -85,8 +98,17 @@ define('local_samce/sig_focus', [], function() {
             }
         });
 
+        // Una página que vuelve de la caché de ida y vuelta (botón "atrás") no se
+        // estaba yendo: de nuevo se puede ocultar de verdad.
+        var onPageShow = env.safe(function(event) {
+            if (event && event.persisted) {
+                leaving = false;
+            }
+        });
+
         win.addEventListener('blur', soon);
         win.addEventListener('focus', soon);
+        win.addEventListener('pageshow', onPageShow);
         doc.addEventListener('visibilitychange', onVisibility);
         var interval = win.setInterval(check, POLL_MS);
 
@@ -102,7 +124,12 @@ define('local_samce/sig_focus', [], function() {
          * @param {boolean} [flushOptions.unloading] la página se está yendo.
          */
         var flush = env.safe(function(flushOptions) {
-            if (!flushOptions || !flushOptions.unloading || hiddenAt === null) {
+            if (!flushOptions || !flushOptions.unloading) {
+                return;
+            }
+            // Un visibilitychange a oculto que llegue después ya no es el alumno.
+            leaving = true;
+            if (hiddenAt === null) {
                 return;
             }
             var away = env.now() - hiddenAt;
@@ -133,6 +160,7 @@ define('local_samce/sig_focus', [], function() {
                 win.clearInterval(interval);
                 win.removeEventListener('blur', soon);
                 win.removeEventListener('focus', soon);
+                win.removeEventListener('pageshow', onPageShow);
                 doc.removeEventListener('visibilitychange', onVisibility);
             },
 
