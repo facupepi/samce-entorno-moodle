@@ -13,3 +13,4 @@ La réplica sigue siendo el lugar donde se rinde para ver el análisis: el compl
 
 - #33: complemento local_samce 0.3.28: el visibility_hidden de la página que se descarga ya no queda huérfano (2026-10-22)
 - #34: TT_S4_03: la cadena completa en local en el README de la réplica
+- #35: docs: réplica del Campus Virtual, estado al cierre del Sprint 3
