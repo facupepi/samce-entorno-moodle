@@ -1,0 +1,60 @@
+{
+  "ajustes": {
+    "nombre": "Segundo Parcial",
+    "intro": "<p>Responda cada pregunta en el espacio indicado, con sus propias palabras. El examen tiene cinco preguntas, una por página, y puede volver a cualquiera de ellas antes de enviar. Dispone de 60 minutos.</p>",
+    "limite": "1",
+    "unidad": "3600",
+    "intentos": "0",
+    "porPagina": "1",
+    "navegacion": "free"
+  },
+  "preguntas": [
+    {
+      "id": "10",
+      "nombre": "P1 - Requisitos funcionales y no funcionales",
+      "texto": "<p>Explique la diferencia entre requisitos funcionales y no funcionales. Dé dos ejemplos de cada uno para un sistema de inscripción a exámenes finales.</p>",
+      "nota": "2",
+      "formato": "editor",
+      "lineas": "15"
+    },
+    {
+      "id": "11",
+      "nombre": "P2 - Ciclo de vida de un sistema de información",
+      "texto": "<p>Describa las etapas del ciclo de vida de un sistema de información. Indique el objetivo de cada etapa y qué documento o producto se obtiene al terminarla.</p>",
+      "nota": "2",
+      "formato": "editor",
+      "lineas": "15"
+    },
+    {
+      "id": "12",
+      "nombre": "P3 - Normalización",
+      "texto": "<p>¿Qué es la normalización de una base de datos y qué problemas evita? Explique la primera, la segunda y la tercera forma normal con un ejemplo breve.</p>",
+      "nota": "2",
+      "formato": "editor",
+      "lineas": "15"
+    },
+    {
+      "id": "13",
+      "nombre": "P4 - Metodologías ágiles y tradicionales",
+      "texto": "<p>Compare las metodologías ágiles con las tradicionales. Mencione dos ventajas y dos desventajas de cada enfoque y en qué tipo de proyecto conviene usar cada uno.</p>",
+      "nota": "2",
+      "formato": "editor",
+      "lineas": "15"
+    },
+    {
+      "id": "14",
+      "nombre": "P5 - Casos de uso",
+      "texto": "<p>Explique qué representa un diagrama de casos de uso y qué elementos lo componen. Describa con texto los actores y los casos de uso principales de un sistema de préstamos de una biblioteca.</p>",
+      "nota": "2",
+      "formato": "editor",
+      "lineas": "15"
+    }
+  ],
+  "paginas": [
+    "section-2",
+    "section-2",
+    "section-2",
+    "section-2",
+    "section-2"
+  ]
+}

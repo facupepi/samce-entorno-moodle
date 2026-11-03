@@ -1,9 +1,10 @@
 # samce-moodle-plugin
 
-`local_samce`, el complemento que conecta el aula virtual con SAMCE. Hace tres
-cosas: abre el panel docente sin pedir una segunda contraseña, avisa cuando un
-alumno empieza o entrega un examen, y registra señales técnicas de cómo rinde
-(cambios de foco, cadencia de tecleo, mouse, portapapeles, ventana).
+`local_samce`, el complemento que conecta el aula virtual con SAMCE. Abre el
+panel docente sin pedir una segunda contraseña, avisa cuando un alumno empieza,
+entrega o abandona un examen, le presenta el aviso de privacidad antes de
+comenzar, le muestra un indicador mientras rinde y registra señales técnicas de
+cómo rinde (cambios de foco, cadencia de tecleo, mouse, portapapeles, ventana).
 
 Es la única pieza que corre dentro de Moodle, y está pensada para que lo que se
 le pide al Campus Virtual sea lo mínimo posible: no habilita servicios web, no
@@ -47,8 +48,9 @@ La contraseña del docente nunca sale de Moodle.
 |---|---|
 | `attempt_started` | el alumno abrió el examen |
 | `attempt_submitted` | lo entregó |
+| `attempt_abandoned` | el intento venció sin entregarse |
 
-En los dos casos arma un aviso con el intento, el alumno (id y nombre), el
+En los tres casos arma un aviso con el intento, el alumno (id y nombre), el
 curso y el examen, lo firma con el mismo mecanismo y el mismo secreto, y lo
 manda por POST de servidor a servidor a `POST /sessions/moodle-event`. El
 backend cifra tanto el id como el nombre del alumno antes de guardarlos
@@ -134,6 +136,34 @@ Los estados que devuelve la función externa son `ok`, `disabled` (la captura
 está apagada o mal configurada: el cliente deja de capturar), `rejected` (el
 lote no se puede aceptar: se descarta) y `retry` (se conserva y se reintenta).
 
+## Antes de empezar y mientras rinde
+
+**El aviso de privacidad, antes de que exista el intento.** En la página del
+cuestionario, «Comenzar intento» abre primero el aviso: qué se registra, adónde
+van los datos, quién accede, el responsable, el plazo de conservación y los
+derechos del alumno. Solo con «Leí el aviso y continúo» se crea el intento; con
+«Volver» no se crea nada. La constancia queda en el servidor, con la hora, y la
+captura no arranca sin ella.
+
+**Una puerta del lado del servidor.** El aviso no es solo un cartel encima de la
+página: en `startattempt.php`, `attempt.php` y `summary.php`, el complemento
+frena y devuelve a la página del cuestionario a un alumno que no pasó por el
+aviso, aunque haya borrado el cartel o desactivado JavaScript.
+
+**Solo Chrome en una computadora.** Con `restrict_browser` encendido (es el valor
+por defecto), un examen monitoreado no se puede rendir desde otro navegador ni
+desde un teléfono o una tableta: el alumno ve un aviso y vuelve al cuestionario.
+
+**El indicador de monitoreo.** Una franja fija al pie de cada página del intento
+y del resumen previo a la entrega, fuera del formulario del examen. Desaparece al
+cerrarse la sesión.
+
+**Cuando la captura no pudo funcionar.** Si una página del examen se abre con
+JavaScript desactivado, el complemento oculta el cuestionario y le explica el
+motivo al alumno; si la página se entregó y la captura no arrancó, lo detecta.
+En los dos casos el servidor de Moodle le avisa al backend (`capture_status`) y
+el docente ve la sesión marcada.
+
 ## Configurar
 
 En *Administración del sitio → Extensiones → Extensiones locales → SAMCE*:
@@ -144,16 +174,37 @@ En *Administración del sitio → Extensiones → Extensiones locales → SAMCE*
 | `panelurl` | el callback del panel, `https://<panel>/auth/callback` |
 | `backendurl` | el endpoint de eventos, `https://<backend>/sessions/moodle-event`; la URL de `/sessions/moodle-events` se deriva de ésta, así que tiene que terminar en `/sessions/moodle-event` |
 | `capture_enabled` | enciende el registro de las señales de interacción. Viene **apagado** por defecto: con el ajuste apagado no se registra ni se envía ningún evento |
+| `restrict_browser` | exige Google Chrome en una computadora para rendir un examen monitoreado. Viene **encendido** |
+| `controllercontact` | el responsable de la base de datos y su contacto, que el aviso le muestra al alumno |
+| `retentionnotice` | el plazo de conservación que el aviso informa; sin cargar, el aviso dice que todavía no está definido |
 
 El secreto tiene que coincidir exactamente con `MOODLE_LAUNCH_SECRET` en el
 backend. Se genera con `openssl rand -hex 32` y no se versiona en ningún lado.
 
 ## Instalar
 
-Copiar el contenido de este repositorio en `local/samce/` dentro de Moodle y
-correr `admin/cli/upgrade.php`, o usar la pantalla de extensiones. Después,
-configurar los ajustes. **No copiar la carpeta `dev/`**: son herramientas de
-desarrollo, no forman parte del complemento (ni tampoco `.github/`).
+1. Copiar el contenido de este repositorio en `local/samce/` dentro de Moodle y
+   correr `admin/cli/upgrade.php`, o usar la pantalla de extensiones.
+   **No copiar la carpeta `dev/`**: son herramientas de desarrollo, no forman
+   parte del complemento (ni tampoco `.github/`).
+2. Configurar los ajustes (ver arriba): `launchsecret` (el mismo que
+   `MOODLE_LAUNCH_SECRET` del backend, de 32 bytes o más), `panelurl` y
+   `backendurl`.
+3. **Prender `capture_enabled`.** Viene apagado, y instalar el complemento no
+   alcanza: queda instalado, la configuración se ve completa y no se captura un
+   solo evento, sin ningún aviso. Sin `launchsecret` o sin `backendurl` el
+   complemento tampoco muestra el aviso de monitoreo ni captura: deja un
+   `debugging()` con el motivo.
+4. Verificar con un intento de prueba: aparece el aviso de monitoreo, la barra
+   al pie de la página y, en el panel, la sesión con sus eventos.
+
+Cada cambio del complemento sube `version.php`; sin eso Moodle no recarga los
+observers ni los textos.
+
+**Despliegue en conjunto con el backend: el backend primero.** Un complemento
+que manda un tipo de evento nuevo contra un backend que todavía no lo conoce
+pierde el lote entero de hasta cien eventos que lo contiene, sin que nadie se
+entere. Ver `docs/DEPLOYMENT.md` en `samce-backend`.
 
 Requiere Moodle 4.5.
 
@@ -218,13 +269,13 @@ dev/                  compilado y pruebas del JS (no se instala en Moodle)
 ## Lo que todavía no está
 
 La conexión con el motor de análisis: el complemento registra lo que pasa en
-el intento, pero no lo interpreta. La captura está pensada para **Chrome en
-computadora**; celulares, otros navegadores y la Moodle App quedan para más
-adelante. En la Moodle App el JS de la página no corre.
+el intento, pero no lo interpreta. Los exámenes monitoreados se rinden solo con
+**Chrome en una computadora**; la Moodle App no pasa por la página del examen,
+así que no muestra el aviso ni captura.
 
 Tampoco escucha la eliminación de un intento. Si el docente borra uno desde el
 aula virtual, el aviso no sale y la sesión queda registrada del lado del
-sistema: los dos lados dejan de coincidir. Se detectó al preparar las capturas
-del cierre del Sprint 1 y está anotado para tratarse en el ciclo siguiente. El
-evento existe (`attempt_deleted`), así que es cuestión de engancharlo en
-`db/events.php` y decidir qué hacer con la sesión ya abierta.
+sistema: los dos lados dejan de coincidir. El Sprint 2 sumó el abandono
+(`attempt_abandoned`), no la eliminación. El evento existe (`attempt_deleted`),
+así que es cuestión de engancharlo en `db/events.php` y decidir qué hacer con la
+sesión ya abierta.
