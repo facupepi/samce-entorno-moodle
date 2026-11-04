@@ -23,7 +23,7 @@ Después del #35 no se fusionó ningún otro pull request en este repositorio. L
 - **La cadena completa, levantada con el README.** Las cinco piezas se pusieron en marcha en la PC donde se armó la réplica para ejecutar esos casos.
 - **Los cuestionarios, comprobados.** Los cmid de la tabla del README coinciden con los de la réplica local: 3, 4, 7, 8, 10, 11 y 12.
 - **El espejo del complemento, comparado.** El código de `plugins/local_samce` coincide con el `main` del complemento, en la versión 0.3.28 (`2026102201`), que es también la instalada en la réplica local. El `diff` del README solo muestra el panorama del sprint del propio complemento, que es documentación y no se instala.
-- `docs/panorama-cierre-sprint-3-final`: el README suma lo que se probó sobre la réplica, la relación con el rendidor y los scripts del parcial local en «Estructura» (TT_S3_03 y TT_S4_03).
+- **El README, al día.** Suma lo que se probó sobre la réplica, la relación con el rendidor y los scripts del parcial local en «Estructura» (TT_S3_03 y TT_S4_03).
 
 ## Estado final
 
