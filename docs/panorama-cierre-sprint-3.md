@@ -7,7 +7,7 @@ La réplica sigue siendo el lugar donde se rinde para ver el análisis: el compl
 - **Cuestionario para el rendidor.** `scripts/crear_parcial_local.php` y `scripts/parcial_railway.json` crean el «Segundo Parcial (réplica del campus)» y los alumnos `rend01` a `rend06` (PR #34).
 - **README del complemento al día.** `plugins/local_samce/README.md` era del 20/09 y ahora es el del original (PR #34).
 
-**Lo que queda abierto:** la comprobación del README por parte de quien levanta la réplica y los casos de prueba CP08 a CP26 sobre la réplica, que corre el equipo.
+**Lo que quedaba abierto en ese momento:** la comprobación del README por parte de quien levanta la réplica y los casos de prueba CP08 a CP26 sobre la réplica. Las dos cosas se completaron después, como se detalla en «Completado después de este cierre».
 
 ## Pull requests del sprint
 
@@ -17,7 +17,7 @@ La réplica sigue siendo el lugar donde se rinde para ver el análisis: el compl
 
 ## Completado después de este cierre
 
-Después del #35 no se fusionó ningún otro pull request en este repositorio. Lo que siguió se hizo sobre la réplica, sin cambios en su código:
+Después del #35 solo entró el #36, que deja este archivo con el estado final del sprint. Lo que siguió se hizo sobre la réplica, sin cambios en su código:
 
 - **Los casos de prueba, ejecutados sobre la réplica local.** CP08 a CP20 como regresión de los sprints anteriores, CP21 a CP26 del análisis de cada sesión (HU06) y las cuatro pruebas de integración 6.06 (motor detenido, permisos, privacidad y recorrido completo), con el «Segundo Parcial (réplica del campus)» y los alumnos `rend01` a `rend06`. Todos quedaron aprobados.
 - **La cadena completa, levantada con el README.** Las cinco piezas se pusieron en marcha en la PC donde se armó la réplica para ejecutar esos casos.
