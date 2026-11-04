@@ -233,6 +233,18 @@ La clave de `rend01` a `rend06` no es la de Railway y no va escrita acá: la tie
 - `localhost` tiene que resolver a IPv4 (el rendidor lo fuerza en `navegador.mjs`).
 - Con la máquina cargada, Moodle tarda en mostrar la pantalla de ingreso y el rendidor se puede cortar por tiempo de espera: conviene esperar a que Moodle responda antes de lanzarlo.
 
+El rendidor vive en su propio repositorio, `facupepi/samce-rendidor`, y su README explica cómo se lanza contra esta réplica. En la réplica de la PC donde se armó, `rend01` a `rend06` llevan nombres de persona (Lucía Fernández, Martín Ríos, Sofía Herrera, Tomás Molina, Valentina Castro y Joaquín Ledesma) para que las capturas de los casos de prueba se lean como un curso real. `crear_parcial_local.php` los crea como «Rendidor 01» a «Rendidor 06», y el nombre se cambia desde la administración de Moodle sin afectar nada más.
+
+### Lo que se probó sobre esta réplica
+
+Al cierre del Sprint 3, la cadena completa en local es donde se ejecutaron:
+
+- **Los casos de prueba CP08 a CP20**, de la captura, el aviso de privacidad y el indicador de monitoreo, repetidos como regresión de los sprints anteriores.
+- **Los casos CP21 a CP26**, del análisis de cada sesión (HU06): las variables, el índice, las alertas, su nivel de riesgo, su explicación y la validación del modelo.
+- **Las cuatro pruebas de integración 6.06**: el motor detenido, los permisos del docente, la privacidad de los datos del alumno y el recorrido completo, desde que el alumno rinde hasta que el docente lee el análisis en el panel.
+
+Todos se rindieron en el «Segundo Parcial (réplica del campus)» con `rend01` a `rend06`. Las sesiones que el rendidor rindió en el «Segundo Parcial» del Moodle de Railway, del que el local es copia, sirven para entrenar y ajustar el modelo junto con el conjunto sintético del motor, y también para validarlo.
+
 ---
 
 ## Uso diario
@@ -289,6 +301,7 @@ más `MOODLE_DATAROOT` para el volumen de datos.
 | [03-complementos.md](docs/03-complementos.md) | Los 7 complementos: cuáles, por qué y cómo se detectaron |
 | [04-identidad-visual.md](docs/04-identidad-visual.md) | Colores, tipografías, logotipos y portada |
 | [05-problemas-conocidos.md](docs/05-problemas-conocidos.md) | Las trampas que ya costaron horas |
+| [panorama-cierre-sprint-3.md](docs/panorama-cierre-sprint-3.md) | Cómo quedó la réplica al cierre del Sprint 3 y los pull requests del sprint |
 
 Si algo no funciona, **empezá por
 [05-problemas-conocidos.md](docs/05-problemas-conocidos.md)**: es probable que
@@ -306,6 +319,9 @@ scripts/                     para levantarlo en la propia máquina
   3_verificar.php            40 comprobaciones, no modifica nada
   samce_setup.php            crea curso, usuarios y evaluación
   samce_preguntas.php        importa las preguntas de la evaluación
+  crear_parcial_local.php    crea el Segundo Parcial (réplica del campus) y rend01 a rend06
+  parcial_railway.json       las preguntas de ese parcial, copiadas del de Railway
+  opcache-samce.ini          el ajuste de rendimiento de PHP (ver 01-instalacion.md)
 
 Dockerfile                   la misma réplica, como imagen
 deploy/                      lo que sólo aplica a la versión publicada
